@@ -9,6 +9,16 @@ After implementation, we will do experiments and measure the performance of each
 ## THE CHALLENGE
 
 ## RESOURCES
+Kung, H. T., & Lehman, P. L. (1979). Concurrent manipulation of binary search trees . Carnegie-Mellon University, Dept. of Computer Science.
+
+
+Natarajan, A., & Mittal, N. (2014). Fast concurrent lock-free binary search trees. SIGPLAN Notices, 49(8), 317–328. https://doi.org/10.1145/2692916.2555256
+
+
+Chatterjee, B., Nguyen, N., & Tsigas, P. (2014). Efficient Lock-free Binary Search Trees.
+
+
+Bronson, N. G., Casper, J., Chafi, H., & Olukotun, K. (2010). A practical concurrent binary search tree. SIGPLAN Notices, 45(5), 257–268. https://doi.org/10.1145/1837853.1693488
 
 ## GOALS AND DELIVERABLES
 
