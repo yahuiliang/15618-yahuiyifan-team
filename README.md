@@ -15,3 +15,16 @@ After implementation, we will do experiments and measure the performance of each
 ## PLATFORM CHOICE
 
 ## SCHEDULE
+| Date      | Goal |
+| ----------- | ----------- |
+| Nov 2 | Read paper of Concurrent Manipulation of Binary Search Trees(lock const nodes) |
+| Nov 3 11:59pm | Project Proposal Due |
+| Nov 5 | Read other 3 papers |
+| Nov 10 | Concurrent Manipulation of Binary Search Trees(lock const nodes) algorithm implementation |
+| Nov 17 | Fast Concurrent Lock-Free Binary Search Trees implementation |
+| Nov 22, 9:00am | Milestone due |
+| Nov 24 | Efficient Lock-free Binary Search Trees implementation |
+| Nov 28 | Data pattern generator |
+| Dec 1 | Simulation results with different concurrent tree versions |
+| Dec 9 11:59pm | Final report due |
+| Dec 10 5:30-8:30pm | Poster Session |
