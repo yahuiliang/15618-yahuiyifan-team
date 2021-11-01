@@ -15,6 +15,7 @@ After implementation, we will do experiments and measure the performance of each
 ## PLATFORM CHOICE
 
 ## SCHEDULE
+
 | Date      | Goal |
 | ----------- | ----------- |
 | Nov 2 | Read paper of Concurrent Manipulation of Binary Search Trees(lock const nodes) |
