@@ -36,13 +36,16 @@ We will use GHC machines and PSC machine. We plan to implement different version
 - Verify the correctness of three implementations
 - Carry out experiments on different implementations of BST with different thread count and workloads
 - Analyze performance, pros and cons of each BST implementation
+
 In order to verify the correctness, we want our data to be consistent before and after a group of manipulations. Also, we do not want deadlocks appear in our implementation, we would have a timeout mechanism to detect whether deadlock happens. All details about these concurrent trees have been specified in papers that we found. Therefore, we are confident that we can implement them.
 
 ### Hope to achieve
 If we are on the right track, and finish above features earlier, we would like to add
+
 - fine-grained tree balancing
 - lock-free tree balancing
 - STM tree balancing
+
 However, if we did not have enough time to implement all 4 trees, we want first 3 of 4 tree implementations to be done, i.e. BST protected by coarse-grained lock, fine-grained lock, and lock-free BST.
 
 ### What to show
@@ -58,7 +61,7 @@ We are going to use C++ to implement our data structures. Our team members are m
 
 ## SCHEDULE
 | Week | Date | Tasks |
-| ----------- | ----------- |
+| --- | --- | :-: |
 | 1 | 11.1 - 11.7 | Proposal <br> Literature review <br> Coarse-grained lock version BST |
 | 2 | 11.8 - 11.14 | Fine-grained lock version BST <br> Lock-free version BST |
 | 3 | 11.15 - 11.21 | Lock-free version BST <br> Transactional memory version BST <br> Milestone report |
