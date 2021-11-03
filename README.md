@@ -1,4 +1,5 @@
 # Concurrent Binary Search Tree
+Here is the PDF version of [project proposal](./Project_Proposal.pdf).
 
 ## SUMMARY
 We want to implement 3 - 4 concurrent version of binary search tree (BST) data structures, including BST protected by single coarse-grained lock, fine-grained lock protected BST, lock free version BST and a transactional memory version BST if we have time. We will do experiments and measure the performance of each version on different workloads and concurrent thread count to analyze the pros and cons of each implementation and compare their performance.
