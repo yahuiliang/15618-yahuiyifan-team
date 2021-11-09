@@ -1,6 +1,7 @@
-#include <stdio.h>
+#include "bst.h"
+#include <iostream>
 
 int main() {
-    printf("Hello world\n");
+    printf("Hello World\n");
     return 0;
 }
