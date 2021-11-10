@@ -4,14 +4,18 @@
 #include <vector>
 #include <climits>
 #include <unordered_set>
+#include <thread>
 
 #define TEST_SIZE 1000
 #define RAND_RANGE 1000
+#define THREAD_NUM 100
 // #define INPUT_PRINT
 
-int main() {
-    srand(time(NULL));
-    CoarseGrainedBST<int> bst;
+static CoarseGrainedBST<int> bst;
+static std::mutex mtx;
+
+void test_single_thread() {
+    bst.clear();
     std::vector<int> elements(TEST_SIZE);
     size_t n = elements.size();
     for (size_t i = 0; i < n; i++) {
@@ -39,6 +43,52 @@ int main() {
         assert(bst.find(test) == false);
     }
     assert(bst.size() == 0);
-    printf("test passed\n");
+}
+
+void test_multi_thread() {
+    bst.clear();
+    std::vector<std::thread> threads(THREAD_NUM);
+    for (size_t i = 0; i < THREAD_NUM; i++) {
+        threads[i] = std::thread([](size_t thread_id) {
+            size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
+            std::vector<int> elements(local_test_size, 0);
+            int start = thread_id * local_test_size;
+            int end = std::min(TEST_SIZE, static_cast<int>((thread_id + 1) * local_test_size));
+            for (int i = start; i < end; i++) {
+                elements[i - start] = i;
+            }
+            #ifdef INPUT_PRINT
+            mtx.lock();
+            printf("thread %d inputs: ", static_cast<int>(thread_id));
+            for (int test : elements) {
+                printf("%d,", test);
+            }
+            printf("\n");
+            mtx.unlock();
+            #endif
+            for (int test : elements) {
+                bst.insert(test);
+            }
+            for (int test : elements) {
+                assert(bst.find(test) == true);
+            }
+            for (int test : elements) {
+                bst.erase(test);
+            }
+            for (int test : elements) {
+                assert(bst.find(test) == false);
+            }
+        }, i);
+    }
+    for (int i = 0; i < THREAD_NUM; i++) {
+        threads[i].join();
+    }
+}
+
+int main() {
+    srand(time(NULL));
+    test_single_thread();
+    test_multi_thread();
+    printf("correctness passed\n");
     return 0;
 }

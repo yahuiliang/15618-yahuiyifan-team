@@ -2,6 +2,7 @@
 #define BST_H
 
 #include <stdio.h>
+#include <mutex>
 
 template<typename T>
 class BST {
@@ -19,8 +20,9 @@ protected:
 public:
     virtual bool insert(const T& t)=0;
     virtual void erase(const T& t)=0;
-    virtual bool find(const T& t) const=0;
+    virtual bool find(const T& t)=0;
     virtual size_t size()=0;
+    virtual void clear()=0;
 };
 
 template<typename T>
@@ -28,17 +30,23 @@ class CoarseGrainedBST : public BST<T> {
     typedef typename BST<T>::Node node_t;
     node_t* root;
     size_t _size;
+    std::mutex mtx;
     bool insert_helper(node_t* node, const T& elemnt);
     bool find_helper(const node_t* node, const T& element) const;
     void erase_helper(node_t* parent, node_t* node, const T& element);
-    void free_helper(node_t* node);
+    void clear(node_t* node);
 public:
     CoarseGrainedBST();
     virtual ~CoarseGrainedBST();
+    CoarseGrainedBST(const CoarseGrainedBST& other)=delete;
+    CoarseGrainedBST& operator=(const CoarseGrainedBST& other)=delete;
+    CoarseGrainedBST(const CoarseGrainedBST&& other)=delete;
+    CoarseGrainedBST& operator=(const CoarseGrainedBST&& other)=delete;
     virtual bool insert(const T& t);
     virtual void erase(const T& t);
-    virtual bool find(const T& t) const;
+    virtual bool find(const T& t);
     virtual size_t size();
+    virtual void clear();
 };
 
 template<typename T>
@@ -46,30 +54,38 @@ CoarseGrainedBST<T>::CoarseGrainedBST(): root(nullptr), _size(0) {}
 
 template<typename T>
 CoarseGrainedBST<T>::~CoarseGrainedBST() {
-    free_helper(root);
+    clear();
 }
 
 template<typename T>
-void CoarseGrainedBST<T>::free_helper(node_t* node) {
+void CoarseGrainedBST<T>::clear() {
+    clear(root);
+}
+
+template<typename T>
+void CoarseGrainedBST<T>::clear(node_t* node) {
     if (node == nullptr) {
         return;
     }
-    free_helper(node->left);
-    free_helper(node->right);
+    clear(node->left);
+    clear(node->right);
     delete node;
 }
 
 template<typename T>
 bool CoarseGrainedBST<T>::insert(const T& t) {
+    mtx.lock();
     if (root == nullptr) {
         root = new node_t(t);
         _size++;
+        mtx.unlock();
         return true;
     }
     bool inserted = insert_helper(root, t);
     if (inserted) {
         _size++;
     }
+    mtx.unlock();
     return inserted;
 }
 
@@ -103,7 +119,9 @@ bool CoarseGrainedBST<T>::insert_helper(node_t* node, const T& element) {
 
 template<typename T>
 void CoarseGrainedBST<T>::erase(const T& t) {
+    mtx.lock();
     erase_helper(root, root, t);
+    mtx.unlock();
 }
 
 template<typename T>
@@ -173,8 +191,11 @@ void CoarseGrainedBST<T>::erase_helper(node_t* parent, node_t* node, const T& el
 }
 
 template<typename T>
-bool CoarseGrainedBST<T>::find(const T& t) const {
-    return find_helper(root, t);
+bool CoarseGrainedBST<T>::find(const T& t) {
+    mtx.lock();
+    bool found = find_helper(root, t);
+    mtx.unlock();
+    return found;
 }
 
 template<typename T>
