@@ -62,7 +62,7 @@ We are going to use C++ to implement our data structures. Our team members are m
 
 ## SCHEDULE
 | Week | Date | Tasks | Done |
-| --- | --- | :-: |
+| --- | --- | :-: | :-: |
 | 1 | 11.1 - 11.7 | Proposal <br> Literature review <br> Coarse-grained lock version BST | Yes |
 | 2 | 11.8 - 11.14 | Fine-grained lock version BST <br> Lock-free version BST | No |
 | 3 | 11.15 - 11.21 | Lock-free version BST <br> Transactional memory version BST <br> Milestone report | No |
