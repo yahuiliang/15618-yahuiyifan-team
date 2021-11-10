@@ -61,11 +61,11 @@ Either fine-grained concurrent BST, lock-free BST, and STM BST implementations s
 We are going to use C++ to implement our data structures. Our team members are more experienced with using C/C++ rather than some high-level languages like Java, Python, and etc. Also, C++ allows us to manage memory on our own, and this is usefull when the paper explicitly specifies an garbage collection mechanism.
 
 ## SCHEDULE
-| Week | Date | Tasks |
+| Week | Date | Tasks | Done |
 | --- | --- | :-: |
-| 1 | 11.1 - 11.7 | Proposal <br> Literature review <br> Coarse-grained lock version BST |
-| 2 | 11.8 - 11.14 | Fine-grained lock version BST <br> Lock-free version BST |
-| 3 | 11.15 - 11.21 | Lock-free version BST <br> Transactional memory version BST <br> Milestone report |
-| 4 | 11.22 - 11.28 | Transactional memory version BST <br> Experiment workload generation | 
-| 5 | 11.29 - 12.5 | Experiments and analysis |
-| 6 | 12.6 - 12.10 | Final report <br> Poster |
+| 1 | 11.1 - 11.7 | Proposal <br> Literature review <br> Coarse-grained lock version BST | Yes |
+| 2 | 11.8 - 11.14 | Fine-grained lock version BST <br> Lock-free version BST | No |
+| 3 | 11.15 - 11.21 | Lock-free version BST <br> Transactional memory version BST <br> Milestone report | No |
+| 4 | 11.22 - 11.28 | Transactional memory version BST <br> Experiment workload generation | No |
+| 5 | 11.29 - 12.5 | Experiments and analysis | No |
+| 6 | 12.6 - 12.10 | Final report <br> Poster | No |
