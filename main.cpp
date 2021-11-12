@@ -6,12 +6,14 @@
 #include <unordered_set>
 #include <thread>
 
-#define TEST_SIZE 1000
+#define TEST_SIZE 100000
 #define RAND_RANGE 1000
 #define THREAD_NUM 100
 // #define INPUT_PRINT
+#define TEST_PARALLEL
+// #define TEST_ERASE
 
-static CoarseGrainedBST<int> bst;
+static FineGrainedBST<int> bst;
 static std::mutex mtx;
 
 void test_single_thread() {
@@ -38,11 +40,14 @@ void test_single_thread() {
     }
     assert(bst.find(INT_MIN) == false);
     assert(bst.find(INT_MAX) == false);
+    #ifdef TEST_ERASE
     for (int test : elements) {
         bst.erase(test);
         assert(bst.find(test) == false);
     }
     assert(bst.size() == 0);
+    #endif
+    printf("test correctness passed\n");
 }
 
 void test_multi_thread() {
@@ -72,23 +77,27 @@ void test_multi_thread() {
             for (int test : elements) {
                 assert(bst.find(test) == true);
             }
+            #ifdef TEST_ERASE
             for (int test : elements) {
                 bst.erase(test);
             }
             for (int test : elements) {
                 assert(bst.find(test) == false);
             }
+            #endif
         }, i);
     }
     for (int i = 0; i < THREAD_NUM; i++) {
         threads[i].join();
     }
+    printf("test parallel passed\n");
 }
 
 int main() {
     srand(time(NULL));
     test_single_thread();
+    #ifdef TEST_PARALLEL
     test_multi_thread();
-    printf("correctness passed\n");
+    #endif
     return 0;
 }
