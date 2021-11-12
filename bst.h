@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <mutex>
 #include <atomic>
+#include <cstring>
 
 template<typename T>
 class BST {
@@ -59,6 +60,7 @@ CoarseGrainedBST<T>::~CoarseGrainedBST() {
 template<typename T>
 void CoarseGrainedBST<T>::clear() {
     clear(root);
+    root = nullptr;
 }
 
 template<typename T>
@@ -69,7 +71,6 @@ void CoarseGrainedBST<T>::clear(node_t* node) {
     clear(node->left);
     clear(node->right);
     delete node;
-    root = nullptr;
 }
 
 template<typename T>
@@ -230,6 +231,7 @@ class FineGrainedBST : public BST<T> {
         node_t() {
             left = nullptr;
             right = nullptr;
+            memset(&val, 0, sizeof(T));
         }
 
         node_t(const T& _val) {
@@ -262,11 +264,13 @@ FineGrainedBST<T>::FineGrainedBST(): root(new node_t()), _size(0) {}
 template<typename T>
 FineGrainedBST<T>::~FineGrainedBST() {
     clear();
+    delete root;
 }
 
 template<typename T>
 void FineGrainedBST<T>::clear() {
     clear(root);
+    root = new node_t();
 }
 
 template<typename T>
@@ -277,7 +281,6 @@ void FineGrainedBST<T>::clear(node_t* node) {
     clear(node->left);
     clear(node->right);
     delete node;
-    root = new node_t();
 }
 
 template<typename T>
