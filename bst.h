@@ -3,20 +3,10 @@
 
 #include <stdio.h>
 #include <mutex>
+#include <atomic>
 
 template<typename T>
 class BST {
-protected:
-    struct Node {
-        Node* left;
-        Node* right;
-        T val;
-        Node(const T& _val) {
-            left = nullptr;
-            right = nullptr;
-            val = _val;
-        }
-    };
 public:
     virtual bool insert(const T& t)=0;
     virtual void erase(const T& t)=0;
@@ -27,7 +17,16 @@ public:
 
 template<typename T>
 class CoarseGrainedBST : public BST<T> {
-    typedef typename BST<T>::Node node_t;
+    struct node_t {
+        node_t* left;
+        node_t* right;
+        T val;
+        node_t(const T& _val) {
+            left = nullptr;
+            right = nullptr;
+            val = _val;
+        }
+    };
     node_t* root;
     size_t _size;
     std::mutex mtx;
@@ -70,6 +69,7 @@ void CoarseGrainedBST<T>::clear(node_t* node) {
     clear(node->left);
     clear(node->right);
     delete node;
+    root = nullptr;
 }
 
 template<typename T>
@@ -222,18 +222,113 @@ size_t CoarseGrainedBST<T>::size() {
 
 template<typename T>
 class FineGrainedBST : public BST<T> {
-    typename BST<T>::Node* root;
+    struct node_t {
+        node_t* left;
+        node_t* right;
+        std::mutex mtx;
+        T val;
+        node_t() {
+            left = nullptr;
+            right = nullptr;
+        }
+
+        node_t(const T& _val) {
+            left = nullptr;
+            right = nullptr;
+            val = _val;
+        }
+    };
+    node_t* root;
+    std::atomic<size_t> _size;
+    std::pair<node_t*, char> find_helper(node_t* node, const T& element) const;
+    void clear(node_t* node);
 public:
     FineGrainedBST();
-    virtual void insert(const T& t);
+    virtual ~FineGrainedBST();
+    FineGrainedBST(FineGrainedBST& other)=delete;
+    FineGrainedBST(FineGrainedBST&& other)=delete;
+    FineGrainedBST& operator=(const FineGrainedBST& other)=delete;
+    FineGrainedBST& operator=(const FineGrainedBST&& other)=delete;
+    virtual bool insert(const T& t);
     virtual void erase(const T& t);
-    virtual void find(const T& t);
+    virtual bool find(const T& t);
     virtual size_t size();
+    virtual void clear();
 };
 
 template<typename T>
-void FineGrainedBST<T>::insert(const T& t) {
-    
+FineGrainedBST<T>::FineGrainedBST(): root(new node_t()), _size(0) {}
+
+template<typename T>
+FineGrainedBST<T>::~FineGrainedBST() {
+    clear();
+}
+
+template<typename T>
+void FineGrainedBST<T>::clear() {
+    clear(root);
+}
+
+template<typename T>
+void FineGrainedBST<T>::clear(node_t* node) {
+    if (node == nullptr) {
+        return;
+    }
+    clear(node->left);
+    clear(node->right);
+    delete node;
+    root = new node_t();
+}
+
+template<typename T>
+bool FineGrainedBST<T>::insert(const T& t) {
+    std::pair<node_t*, char> fdir = find_helper(root, t);
+    node_t* dir;
+    if (fdir.second == 'L') {
+        dir = fdir.first->left;
+    } else {
+        dir = fdir.first->right;
+    }
+    bool inserted = false;
+    if (dir == nullptr) {
+        if (fdir.second == 'L') {
+            fdir.first->left = new node_t(t);
+        } else {
+            fdir.first->right = new node_t(t);
+        }
+        _size++;
+        inserted = true;
+    }
+    fdir.first->mtx.unlock();
+    return inserted;
+}
+
+template<typename T>
+std::pair<typename FineGrainedBST<T>::node_t*, char> FineGrainedBST<T>::find_helper(node_t* node, const T& element) const {
+    node_t* dir;
+    char dir_symbol;
+    if (element < node->val) {
+        dir = node->left;
+        dir_symbol = 'L';
+    } else {
+        dir = node->right;
+        dir_symbol = 'R';
+    }
+    if (dir != nullptr && dir->val != element) {
+        return find_helper(dir, element);
+    }
+    node->mtx.lock();
+    bool changed = false;
+    if (dir_symbol == 'L') {
+        changed = node->left != dir;
+    } else {
+        changed = node->right != dir;
+    }
+    if (changed) {
+        node->mtx.unlock();
+        return find_helper(node, element);
+    }
+    return std::pair<node_t*, char>(node, dir_symbol);
 }
 
 template<typename T>
@@ -242,8 +337,22 @@ void FineGrainedBST<T>::erase(const T& t) {
 }
 
 template<typename T>
-void FineGrainedBST<T>::find(const T& t) {
-    
+bool FineGrainedBST<T>::find(const T& t) {
+    std::pair<node_t*, char> fdir = find_helper(root, t);
+    node_t* dir;
+    if (fdir.second == 'L') {
+        dir = fdir.first->left;
+    } else {
+        dir = fdir.first->right;
+    }
+    bool found = dir != nullptr;
+    fdir.first->mtx.unlock();
+    return found;
+}
+
+template<typename T>
+size_t FineGrainedBST<T>::size() {
+    return _size.load();
 }
 
 template<typename T>
