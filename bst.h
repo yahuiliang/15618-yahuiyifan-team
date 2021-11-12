@@ -227,20 +227,30 @@ class FineGrainedBST : public BST<T> {
     enum Dir {
         Left=0, Right=1
     };
+    enum Color {
+        White, Blue
+    };
     struct node_t {
         node_t* children[2];
+        node_t* back;
         std::mutex mtx;
         T val;
+        Color color;
         node_t() {
-            children[Dir::Left] = nullptr;
-            children[Dir::Right] = nullptr;
-            memset(&val, 0, sizeof(T));
+            init();
         }
 
         node_t(const T& _val) {
+            init();
+            val = _val;
+        }
+
+        void init() {
             children[Dir::Left] = nullptr;
             children[Dir::Right] = nullptr;
-            val = _val;
+            back = nullptr;
+            memset(&val, 0, sizeof(T));
+            color = Color::White;
         }
     };
     node_t* root;
@@ -316,9 +326,10 @@ std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> 
         return find_helper(child, element);
     }
     node->mtx.lock();
-    bool changed = false;
-    changed = node->children[dir] != child;
-    if (changed) {
+    if (node->color == Color::Blue) {
+        node->mtx.unlock();
+        return find_helper(node->back, element);
+    } else if (node->children[dir] != child) {
         node->mtx.unlock();
         return find_helper(node, element);
     }
@@ -328,6 +339,35 @@ std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> 
 template<typename T>
 void FineGrainedBST<T>::erase(const T& t) {
     
+}
+
+template<typename T>
+std::vector<typename FineGrainedBST<T>::node_t*> FineGrainedBST<T>::rotation(node_t* a, Dir dir1, Dir dir2) {
+    node_t* b = a->children[dir1];
+    node_t* c = b->children[dir2];
+    node_t* b_new = new node_t();
+    node_t* c_new = new node_t();
+    
+    b_new->mtx.lock();
+    c_new->mtx.lock();
+    c->mtx.lock();
+    
+    c_new->children[dir2] = c->children[dir2];
+    c_new->children[dir2 ^ 1] = b_new;
+    c_new->val = c->val;
+    b_new->children[dir2] = c->children[dir2 ^ 1];
+    b_new->children[dir2 ^ 1] = b->children[dir2 ^ 1];
+    b_new->val = b->val;
+    a->children[dir1] = c_new;
+    
+    b->back = a;
+    b->color = Color::Blue;
+    c->back = c_new;
+    c->color = Color::Blue;
+    a->mtx.unlock();
+    b->mtx.unlock();
+    c->mtx.unlock();
+    return { a, c_new, b_new };
 }
 
 template<typename T>
