@@ -357,18 +357,17 @@ size_t FineGrainedBST<T>::size() {
 
 template<typename T>
 class LockFreeBST : public BST<T> {
-    typename BST<T>::Node* root;
 public:
-    LockFreeBST();
-    virtual void insert(const T& t);
-    virtual void erase(const T& t);
-    virtual void find(const T& t);
-    virtual size_t size();
+    virtual bool insert(const T& t)=0;
+    virtual void erase(const T& t)=0;
+    virtual bool find(const T& t)=0;
+    virtual size_t size()=0;
+    virtual void clear()=0;
 };
 
 template<typename T>
-void LockFreeBST<T>::insert(const T& t) {
-    
+bool LockFreeBST<T>::insert(const T& t) {
+    return false;
 }
 
 template<typename T>
@@ -377,8 +376,18 @@ void LockFreeBST<T>::erase(const T& t) {
 }
 
 template<typename T>
-void LockFreeBST<T>::find(const T& t) {
-    
+bool LockFreeBST<T>::find(const T& t) {
+    return false;
+}
+
+template<typename T>
+size_t size() {
+    return 0;
+}
+
+template<typename T>
+void clear() {
+
 }
 
 #endif
