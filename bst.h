@@ -242,7 +242,8 @@ class FineGrainedBST : public BST<T> {
     node_t* root;
     std::mutex root_mtx;
     std::atomic<size_t> _size;
-    bool insert_helper(node_t* node, const T& element);
+    void erase_helper(node_t* node, node_t *node_parent);
+    node_t *find_left_max_p(node_t *node);
     void clear(node_t* node);
 public:
     FineGrainedBST();
@@ -279,7 +280,7 @@ void FineGrainedBST<T>::clear(node_t* node) {
     clear(node->left);
     clear(node->right);
     delete node;
-    root = new node_t();
+    root = nullptr;
 }
 
 // template<typename T>
@@ -388,10 +389,120 @@ bool FineGrainedBST<T>::insert(const T& t) {
     }
 }
 
+template<typename T>
+typename FineGrainedBST<T>::node_t* FineGrainedBST<T>::find_left_max_p(node_t *node) {
+    node_t *parent = node;
+    node_t *cur = parent->left;
+    if (cur != nullptr) cur->mtx.lock();
+    while (cur->right != nullptr) {
+        node_t *old_parent = parent;
+        parent = cur;
+        cur = parent->right;
+        if (old_parent != node) old_parent->mtx.unlock();
+        if (cur != nullptr) cur->mtx.unlock();
+    }
+    return parent;
+}
+
+template<typename T>
+void FineGrainedBST<T>::erase_helper(node_t *node, node_t *node_parent) {
+    // If node is leaf
+    if (node->left == nullptr && node->right == nullptr) {
+        if (node_parent == nullptr) {
+            root = nullptr;
+        } else if (node->val < node_parent->val) {
+            node_parent->left = nullptr;
+        } else {
+            node_parent->right = nullptr;
+        }
+        delete(node);
+    }
+    // If node has no right child
+    else if (node->right == nullptr) {
+        if (node_parent == nullptr) {
+            root = node->left;
+        } else if (node->val < node_parent->val) {
+            node_parent->left = node->left;
+        } else {
+            node_parent->right = node->left;
+        }
+        delete(node);
+    }
+    // If node has no left child
+    else if (node->left == nullptr) {
+        printf("no left child\n");
+        if (node_parent == nullptr) {
+            root = node->right;
+        } else if (node->val < node_parent->val) {
+            node_parent->left = node->right;
+        } else {
+            node_parent->right = node->right;
+        }
+        delete(node);
+        printf("node deleted\n");
+    }
+    // If node has two children
+    // Replace node's value with the largest value in left subtree
+    else {
+        node_t *left_max_p = find_left_max_p(node);
+        if (left_max_p == node) {
+            node_t *replace = node->left;
+            node->val = replace->val;
+            node->left = replace->left;
+            replace->mtx.unlock();
+            delete(replace);
+        } else {
+            node_t *replace = left_max_p->right;
+            node->val = replace->val;
+            left_max_p->right = replace->left;
+            left_max_p->mtx.unlock();
+            replace->mtx.unlock();
+            delete(replace);
+        }
+    }
+    if (node_parent != nullptr) node_parent->mtx.unlock();
+    node->mtx.unlock();
+    printf("node unlocked\n");
+}
 
 template<typename T>
 void FineGrainedBST<T>::erase(const T& t) {
-    
+    printf("erase %d\n", (int)t);
+    root_mtx.lock();
+    node_t *parent = root;
+    node_t *cur;
+    if (t == parent->val) {
+        printf("erase root\n");
+        parent->mtx.lock();
+        printf("node locked\n");
+        erase_helper(parent, nullptr);
+        root_mtx.unlock();
+        _size--;
+        return;
+    } else if (t < parent->val) {
+        cur = parent->left;
+    } else {
+        cur = parent->right;
+    }
+    parent->mtx.lock();
+    root_mtx.unlock();
+    if (cur != nullptr) cur->mtx.lock();
+    while (cur != nullptr) {
+        if (cur->val == t) {
+            erase_helper(cur, parent);
+            _size--;
+            return;
+        }
+        node_t *old_parent = parent;
+        parent = cur;
+        if (t < parent->val) {
+            cur = parent->left;
+        } else {
+            cur = parent->right;
+        }
+        old_parent->mtx.unlock();
+        if (cur != nullptr) cur->mtx.lock();
+    }
 }
 
 template<typename T>
