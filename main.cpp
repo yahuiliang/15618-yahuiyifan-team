@@ -6,12 +6,12 @@
 #include <unordered_set>
 #include <thread>
 
-#define TEST_SIZE 100000
+#define TEST_SIZE 10000
 #define RAND_RANGE 1000
 #define THREAD_NUM 100
 // #define INPUT_PRINT
 #define TEST_PARALLEL
-// #define TEST_ERASE
+#define TEST_ERASE
 
 static FineGrainedBST<int> bst;
 static std::mutex mtx;
