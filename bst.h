@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <mutex>
 #include <atomic>
+#include <vector>
 
 template<typename T>
 class BST {
@@ -239,8 +240,9 @@ class FineGrainedBST : public BST<T> {
         }
     };
     node_t* root;
+    std::mutex root_mtx;
     std::atomic<size_t> _size;
-    std::pair<node_t*, char> find_helper(node_t* node, const T& element) const;
+    bool insert_helper(node_t* node, const T& element);
     void clear(node_t* node);
 public:
     FineGrainedBST();
@@ -257,7 +259,7 @@ public:
 };
 
 template<typename T>
-FineGrainedBST<T>::FineGrainedBST(): root(new node_t()), _size(0) {}
+FineGrainedBST<T>::FineGrainedBST(): root(nullptr), _size(0) {}
 
 template<typename T>
 FineGrainedBST<T>::~FineGrainedBST() {
@@ -280,56 +282,112 @@ void FineGrainedBST<T>::clear(node_t* node) {
     root = new node_t();
 }
 
-template<typename T>
-bool FineGrainedBST<T>::insert(const T& t) {
-    std::pair<node_t*, char> fdir = find_helper(root, t);
-    node_t* dir;
-    if (fdir.second == 'L') {
-        dir = fdir.first->left;
-    } else {
-        dir = fdir.first->right;
-    }
-    bool inserted = false;
-    if (dir == nullptr) {
-        if (fdir.second == 'L') {
-            fdir.first->left = new node_t(t);
-        } else {
-            fdir.first->right = new node_t(t);
-        }
-        _size++;
-        inserted = true;
-    }
-    fdir.first->mtx.unlock();
-    return inserted;
-}
+// template<typename T>
+// bool FineGrainedBST<T>::insert(const T& t) {
+//     std::pair<node_t*, char> fdir = find_helper(root, t);
+//     node_t* dir;
+//     if (fdir.second == 'L') {
+//         dir = fdir.first->left;
+//     } else {
+//         dir = fdir.first->right;
+//     }
+//     bool inserted = false;
+//     if (dir == nullptr) {
+//         if (fdir.second == 'L') {
+//             fdir.first->left = new node_t(t);
+//         } else {
+//             fdir.first->right = new node_t(t);
+//         }
+//         _size++;
+//         inserted = true;
+//     }
+//     fdir.first->mtx.unlock();
+//     return inserted;
+// }
+
+// template<typename T>
+// std::pair<typename FineGrainedBST<T>::node_t*, char> FineGrainedBST<T>::find_helper(node_t* node, const T& element) const {
+//     node_t* s;
+//     char dir;
+//     if (element < node->val) {
+//         s = node->left;
+//         dir = 'L';
+//     } else {
+//         s = node->right;
+//         dir = 'R';
+//     }
+//     if (s != nullptr && s->val != element) {
+//         return find_helper(s, element);
+//     }
+//     node->mtx.lock();
+//     if (node->color == BLUE) {
+//         node->mtx.unlock();
+//         return find_helper(node->back, element);
+//     } else {
+//         bool changed = false;
+//         if (dir == 'L') {
+//             changed = node->left != s;
+//         } else {
+//             changed = node->right != s;
+//         }
+//         if (changed) {
+//             node->mtx.unlock();
+//             return find_helper(node, element);
+//         } else {
+//             return std::pair<node_t*, char>(node, dir);
+//         }
+//     }
+// }
 
 template<typename T>
-std::pair<typename FineGrainedBST<T>::node_t*, char> FineGrainedBST<T>::find_helper(node_t* node, const T& element) const {
-    node_t* dir;
-    char dir_symbol;
-    if (element < node->val) {
-        dir = node->left;
-        dir_symbol = 'L';
+bool FineGrainedBST<T>::insert(const T& t) {
+    node_t *node = new node_t(t);
+    root_mtx.lock();
+    if (root == nullptr) {
+        root = node;
+        _size++;
+        root_mtx.unlock();
+        return true;
     } else {
-        dir = node->right;
-        dir_symbol = 'R';
+        node_t *parent = root;
+        node_t *cur;
+        if (t == parent->val) {
+            root_mtx.unlock();
+            return false;
+        } else if (t < parent->val) {
+            cur = parent->left;
+        } else {
+            cur = parent->right;
+        }
+        parent->mtx.lock();
+        root_mtx.unlock();
+        if (cur != nullptr) cur->mtx.lock();
+        while (cur != nullptr) {
+            node_t *old_parent = parent;
+            parent = cur;
+            if (t == parent->val) {
+                old_parent->mtx.unlock();
+                parent->mtx.unlock();
+                return false;
+            } else if (t < parent->val) {
+                cur = parent->left;
+            } else {
+                cur = parent->right;
+            }
+            old_parent->mtx.unlock();
+            if (cur != nullptr) cur->mtx.lock();
+        }
+        if (t < parent->val) {
+            parent->left = node;
+        } else {
+            parent->right = node;
+        }
+        parent->mtx.unlock();
+        _size++;
+        return true;
     }
-    if (dir != nullptr && dir->val != element) {
-        return find_helper(dir, element);
-    }
-    node->mtx.lock();
-    bool changed = false;
-    if (dir_symbol == 'L') {
-        changed = node->left != dir;
-    } else {
-        changed = node->right != dir;
-    }
-    if (changed) {
-        node->mtx.unlock();
-        return find_helper(node, element);
-    }
-    return std::pair<node_t*, char>(node, dir_symbol);
 }
+
 
 template<typename T>
 void FineGrainedBST<T>::erase(const T& t) {
@@ -338,16 +396,42 @@ void FineGrainedBST<T>::erase(const T& t) {
 
 template<typename T>
 bool FineGrainedBST<T>::find(const T& t) {
-    std::pair<node_t*, char> fdir = find_helper(root, t);
-    node_t* dir;
-    if (fdir.second == 'L') {
-        dir = fdir.first->left;
+    root_mtx.lock();
+    if (root == nullptr) {
+        root_mtx.unlock();
+        return false;
     } else {
-        dir = fdir.first->right;
+        node_t *parent = root;
+        node_t *cur;
+        if (t == parent->val) {
+            root_mtx.unlock();
+            return true;
+        } else if (t < parent->val) {
+            cur = parent->left;
+        } else {
+            cur = parent->right;
+        }
+        parent->mtx.lock();
+        root_mtx.unlock();
+        if (cur != nullptr) cur->mtx.lock();
+        while (cur != nullptr) {
+            node_t *old_parent = parent;
+            parent = cur;
+            if (t == parent->val) {
+                old_parent->mtx.unlock();
+                parent->mtx.unlock();
+                return true;
+            } else if (t < parent->val) {
+                cur = parent->left;
+            } else {
+                cur = parent->right;
+            }
+            old_parent->mtx.unlock();
+            if (cur != nullptr) cur->mtx.lock();
+        }
+        parent->mtx.unlock();
+        return false;
     }
-    bool found = dir != nullptr;
-    fdir.first->mtx.unlock();
-    return found;
 }
 
 template<typename T>
