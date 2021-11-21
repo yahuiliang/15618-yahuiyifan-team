@@ -5,6 +5,7 @@
 #include <climits>
 #include <unordered_set>
 #include <thread>
+#include <chrono>
 
 #define TEST_SIZE 100000
 #define RAND_RANGE 1000
@@ -95,9 +96,13 @@ void test_multi_thread() {
 
 int main() {
     srand(time(NULL));
+    auto start = std::chrono::high_resolution_clock::now();
     test_single_thread();
     #ifdef TEST_PARALLEL
     test_multi_thread();
     #endif
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    printf("test finished in %f\n", static_cast<float>(duration.count()) / 1e3);
     return 0;
 }
