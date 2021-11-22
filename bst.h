@@ -224,38 +224,27 @@ size_t CoarseGrainedBST<T>::size() {
 template<typename T>
 class FineGrainedBST : public BST<T> {
     struct node_t {
-        std::shared_ptr<node_t> left;
-        std::shared_ptr<node_t> right;
-        std::shared_ptr<node_t> back;
-        bool deleted;
+        node_t* left;
+        node_t* right;
         std::mutex mtx;
         T val;
         node_t() {
             left = nullptr;
             right = nullptr;
-            back = nullptr;
-            deleted = false;
         }
 
         node_t(const T& _val) {
             left = nullptr;
             right = nullptr;
-            back = nullptr;
-            deleted = false;
             val = _val;
         }
     };
-    std::shared_ptr<node_t> root;
+    node_t* root;
     std::mutex root_mtx;
     std::atomic<size_t> _size;
-    // std::vector<node_t *> gc_queue;
-    // std::mutex gc_mtx;
-    std::pair<std::shared_ptr<node_t>, char> find_helper(std::shared_ptr<node_t> node, const T& element) const;
-    std::pair<std::shared_ptr<node_t>, std::shared_ptr<node_t>> rotation(std::shared_ptr<node_t> a, char dir1, char dir2);
-    void deletion_by_rotation(std::shared_ptr<node_t>f, char dir);
-    void remove(std::shared_ptr<node_t>a, char dir1, char dir2);
-    // void clear(std::shared_ptr<node_t> node);
-    // void clear_gc();
+    void erase_helper(node_t* node, node_t *node_parent);
+    node_t *find_left_max_p(node_t *node);
+    void clear(node_t* node);
 public:
     FineGrainedBST();
     virtual ~FineGrainedBST();
@@ -271,274 +260,306 @@ public:
 };
 
 template<typename T>
-FineGrainedBST<T>::FineGrainedBST(): root(std::make_shared<node_t>()), _size(0) {}
+FineGrainedBST<T>::FineGrainedBST(): root(nullptr), _size(0) {}
 
 template<typename T>
 FineGrainedBST<T>::~FineGrainedBST() {
-    // clear();
+    clear();
 }
 
 template<typename T>
 void FineGrainedBST<T>::clear() {
-    // root = std::make_shared;
+    clear(root);
+}
+
+template<typename T>
+void FineGrainedBST<T>::clear(node_t* node) {
+    if (node == nullptr) {
+        return;
+    }
+    clear(node->left);
+    clear(node->right);
+    delete node;
+    root = nullptr;
 }
 
 // template<typename T>
-// void FineGrainedBST<T>::clear(std::shared_ptr<node_t> node) {
-    // if (node == nullptr) {
-    //     return;
-    // }
-    // clear(node->left);
-    // clear(node->right);
-    // clear(node->back);
-    // delete node;
-    
+// bool FineGrainedBST<T>::insert(const T& t) {
+//     std::pair<node_t*, char> fdir = find_helper(root, t);
+//     node_t* dir;
+//     if (fdir.second == 'L') {
+//         dir = fdir.first->left;
+//     } else {
+//         dir = fdir.first->right;
+//     }
+//     bool inserted = false;
+//     if (dir == nullptr) {
+//         if (fdir.second == 'L') {
+//             fdir.first->left = new node_t(t);
+//         } else {
+//             fdir.first->right = new node_t(t);
+//         }
+//         _size++;
+//         inserted = true;
+//     }
+//     fdir.first->mtx.unlock();
+//     return inserted;
 // }
 
 // template<typename T>
-// void FineGrainedBST<T>::clear_gc() {
-//     for (size_t i = 0; i < gc_queue.size(); i++) {
-//         delete(gc_queue[i]);
+// std::pair<typename FineGrainedBST<T>::node_t*, char> FineGrainedBST<T>::find_helper(node_t* node, const T& element) const {
+//     node_t* s;
+//     char dir;
+//     if (element < node->val) {
+//         s = node->left;
+//         dir = 'L';
+//     } else {
+//         s = node->right;
+//         dir = 'R';
 //     }
-//     gc_queue.clear();
+//     if (s != nullptr && s->val != element) {
+//         return find_helper(s, element);
+//     }
+//     node->mtx.lock();
+//     if (node->color == BLUE) {
+//         node->mtx.unlock();
+//         return find_helper(node->back, element);
+//     } else {
+//         bool changed = false;
+//         if (dir == 'L') {
+//             changed = node->left != s;
+//         } else {
+//             changed = node->right != s;
+//         }
+//         if (changed) {
+//             node->mtx.unlock();
+//             return find_helper(node, element);
+//         } else {
+//             return std::pair<node_t*, char>(node, dir);
+//         }
+//     }
 // }
 
 template<typename T>
 bool FineGrainedBST<T>::insert(const T& t) {
-    std::pair<std::shared_ptr<node_t>, char> fdir = find_helper(root, t);
-    std::shared_ptr<node_t> dir;
-    if (fdir.second == 'L') {
-        dir = fdir.first->left;
-    } else {
-        dir = fdir.first->right;
-    }
-    bool inserted = false;
-    if (dir == nullptr) {
-        if (fdir.second == 'L') {
-            fdir.first->left = std::make_shared<node_t>(t);
-        } else {
-            fdir.first->right = std::make_shared<node_t>(t);
-        }
+    node_t *node = new node_t(t);
+    root_mtx.lock();
+    if (root == nullptr) {
+        root = node;
         _size++;
-        inserted = true;
-    }
-    fdir.first->mtx.unlock();
-    return inserted;
-}
-
-template<typename T>
-std::pair<std::shared_ptr<typename FineGrainedBST<T>::node_t>, char> FineGrainedBST<T>::find_helper(std::shared_ptr<node_t> node, const T& element) const {
-    // printf("element to find: %d\n", (int)element);
-    // printf("find node: %d\n", (int)node->val);
-    std::shared_ptr<node_t> s;
-    char dir;
-    if (element < node->val) {
-        s = node->left;
-        dir = 'L';
+        root_mtx.unlock();
+        return true;
     } else {
-        s = node->right;
-        dir = 'R';
-    }
-    // if (s != nullptr) {
-    //     // printf("s_val: %d\n", (int)s->val);
-    // }
-    if (s != nullptr && s->val != element) {
-        return find_helper(s, element);
-    }
-    node->mtx.lock();
-    if (node->deleted == true) {
-        node->mtx.unlock();
-        return find_helper(node->back, element);
-    } else {
-        bool changed = false;
-        if (dir == 'L') {
-            changed = node->left != s;
+        node_t *parent = root;
+        node_t *cur;
+        if (t == parent->val) {
+            root_mtx.unlock();
+            return false;
+        } else if (t < parent->val) {
+            cur = parent->left;
         } else {
-            changed = node->right != s;
+            cur = parent->right;
         }
-        if (changed) {
-            node->mtx.unlock();
-            return find_helper(node, element);
-        } else {
-            return std::pair<std::shared_ptr<node_t>, char>(node, dir);
-        }
-    }
-}
-
-template<typename T>
-bool FineGrainedBST<T>::find(const T& t) {
-    std::pair<std::shared_ptr<node_t>, char> fdir = find_helper(root, t);
-    std::shared_ptr<node_t> dir;
-    if (fdir.second == 'L') {
-        dir = fdir.first->left;
-    } else {
-        dir = fdir.first->right;
-    }
-    bool found = dir != nullptr;
-    fdir.first->mtx.unlock();
-    return found;
-}
-
-template<typename T>
-std::pair<std::shared_ptr<typename FineGrainedBST<T>::node_t>, std::shared_ptr<typename FineGrainedBST<T>::node_t> > FineGrainedBST<T>::rotation(std::shared_ptr<node_t> a, char dir1, char dir2) {
-    std::shared_ptr<node_t> b;
-    if (dir1 == 'L') {
-        b = a->left;
-    } else {
-        b = a->right;
-    }
-    std::shared_ptr<node_t> c;
-    if (dir2 == 'L') {
-        c = b->left;
-    } else {
-        c = b->right;
-    }
-    std::shared_ptr<node_t> b_p = std::make_shared<node_t>();
-    std::shared_ptr<node_t> c_p = std::make_shared<node_t>();
-    c_p->mtx.lock();
-    b_p->mtx.lock();
-    c->mtx.lock();
-    if (dir2 == 'L') {
-        c_p->left = c->left;
-        c_p->right = b_p;
-        c_p->val = c->val;
-        b_p->left = c->right;
-        b_p->right = b->right;
-        b_p->val = b->val;
-    } else {
-        c_p->right = c->right;
-        c_p->left = b_p;
-        c_p->val = c->val;
-        b_p->right = c->left;
-        b_p->left = b->left;
-        b_p->val = b->val;
-    }
-    if (dir1 == 'L') {
-        a->left = c_p;
-    } else {
-        a->right = c_p;
-    }
-    b->back = a;
-    b->deleted = true;
-    c->back = c_p;
-    c->deleted = true;
-    // gc_mtx.lock();
-    // gc_queue.push_back(b);
-    // gc_queue.push_back(c);
-    // gc_mtx.unlock();
-    a->mtx.unlock();
-    b->mtx.unlock();
-    c->mtx.unlock();
-    return std::pair<std::shared_ptr<node_t>, std::shared_ptr<node_t> >(c_p, b_p);
-}
-
-template<typename T>
-void FineGrainedBST<T>::remove(std::shared_ptr<node_t> a, char dir1, char dir2) {
-    std::shared_ptr<node_t> b;
-    if (dir1 == 'L') {
-        b = a->left;
-    } else {
-        b = a->right;
-    }
-    std::shared_ptr<node_t> c;
-    if (dir2 == 'L') {
-        c = b->left;
-    } else {
-        c = b->right;
-    }
-    if (dir1 == 'L') {
-        a->left = c;
-    } else {
-        a->right = c;
-    }
-    if (dir2 == 'L') {
-        b->right = c;
-    } else {
-        b->left = c;
-    }
-    b->back = a;
-    b->deleted = true;
-    // gc_mtx.lock();
-    // gc_queue.push_back(b);
-    // gc_mtx.unlock();
-    a->mtx.unlock();
-    b->mtx.unlock();
-}
-
-template<typename T>
-void FineGrainedBST<T>::deletion_by_rotation(std::shared_ptr<node_t> f, char dir) {
-    std::shared_ptr<node_t> s;
-    if (dir == 'L') {
-        s = f->left;
-    } else {
-        s = f->right;
-    }
-    if (s->left == nullptr) {
-        remove(f, dir, 'R');
-    } else {
-        // printf("rotate %d, dir1: %c, dir2: L\n", (int)f->val, dir);
-        std::pair<std::shared_ptr<node_t>, std::shared_ptr<node_t>> g_h = rotation(f, dir, 'L');
-        std::shared_ptr<node_t> g = g_h.first;
-        std::shared_ptr<node_t> h = g_h.second;
-        if (h->left == nullptr) {
-            deletion_by_rotation(g, 'R');
-        } else {
-            deletion_by_rotation(g, 'R');
-            f->mtx.lock();
-            bool rebalance_failed = false;
-            if (dir == 'L') {
-                if (g != f->left) {
-                    rebalance_failed = true;
-                }
+        parent->mtx.lock();
+        root_mtx.unlock();
+        if (cur != nullptr) cur->mtx.lock();
+        while (cur != nullptr) {
+            node_t *old_parent = parent;
+            parent = cur;
+            if (t == parent->val) {
+                old_parent->mtx.unlock();
+                parent->mtx.unlock();
+                return false;
+            } else if (t < parent->val) {
+                cur = parent->left;
             } else {
-                if (g != f->right) {
-                    rebalance_failed = true;
-                }
+                cur = parent->right;
             }
-            if (f->deleted == true) {
-                rebalance_failed = true;
-            }
-            if (rebalance_failed) {
-                f->mtx.unlock();
-            } else {
-                g->mtx.lock();
-                std::pair<std::shared_ptr<node_t>, std::shared_ptr<node_t> > gp_hp = rotation(f, dir, 'R');
-                gp_hp.first->mtx.unlock();
-                gp_hp.second->mtx.unlock();
-            }
+            old_parent->mtx.unlock();
+            if (cur != nullptr) cur->mtx.lock();
+        }
+        if (t < parent->val) {
+            parent->left = node;
+        } else {
+            parent->right = node;
+        }
+        parent->mtx.unlock();
+        _size++;
+        return true;
+    }
+}
+
+template<typename T>
+typename FineGrainedBST<T>::node_t* FineGrainedBST<T>::find_left_max_p(node_t *node) {
+    node_t *parent = node;
+    node_t *cur = parent->left;
+    if (cur != nullptr) cur->mtx.lock();
+    while (cur->right != nullptr) {
+        node_t *old_parent = parent;
+        parent = cur;
+        cur = parent->right;
+        if (old_parent != node) old_parent->mtx.unlock();
+        if (cur != nullptr) cur->mtx.unlock();
+    }
+    printf("find left max parent: %d, replace: %d\n", (int)parent->val, (int)cur->val);
+    return parent;
+}
+
+template<typename T>
+void FineGrainedBST<T>::erase_helper(node_t *node, node_t *node_parent) {
+    // If node is leaf
+    if (node->left == nullptr && node->right == nullptr) {
+        printf("erase case 1\n");
+        if (node_parent == nullptr) {
+            root = nullptr;
+        } else if (node->val < node_parent->val) {
+            node_parent->left = nullptr;
+        } else {
+            node_parent->right = nullptr;
+        }
+        delete(node);
+    }
+    // If node has no right child
+    else if (node->right == nullptr) {
+        printf("erase case 2\n");
+        if (node_parent == nullptr) {
+            root = node->left;
+        } else if (node->val < node_parent->val) {
+            node_parent->left = node->left;
+        } else {
+            node_parent->right = node->left;
+        }
+        delete(node);
+    }
+    // If node has no left child
+    else if (node->left == nullptr) {
+        printf("erase case 3\n");
+        // printf("no left child\n");
+        if (node_parent == nullptr) {
+            root = node->right;
+        } else if (node->val < node_parent->val) {
+            node_parent->left = node->right;
+        } else {
+            node_parent->right = node->right;
+        }
+        delete(node);
+        // printf("node deleted\n");
+    }
+    // If node has two children
+    // Replace node's value with the largest value in left subtree
+    else {
+        printf("erase case 4\n");
+        node_t *left_max_p = find_left_max_p(node);
+        if (left_max_p == node) {
+            node_t *replace = node->left;
+            node->val = replace->val;
+            printf("replaced 1: %d\n", (int)node->val);
+            node->left = replace->left;
+            replace->mtx.unlock();
+            delete(replace);
+        } else {
+            node_t *replace = left_max_p->right;
+            node->val = replace->val;
+            printf("replaced 2: %d\n", (int)node->val);
+            left_max_p->right = replace->left;
+            left_max_p->mtx.unlock();
+            replace->mtx.unlock();
+            delete(replace);
         }
     }
+    if (node_parent != nullptr) node_parent->mtx.unlock();
+    node->mtx.unlock();
+    // printf("node unlocked\n");
 }
 
 template<typename T>
 void FineGrainedBST<T>::erase(const T& t) {
-    // printf("erase node: %d\n", (int)t);
-    std::pair<std::shared_ptr<node_t>, char> f_dir = find_helper(root, t);
-    std::shared_ptr<node_t> f = f_dir.first;
-    char dir = f_dir.second;
-    // printf("f node: %d\n", (int)f->val);
-    // printf("dir: %c\n", dir);
-    if (dir == 'L') {
-        // value not in tree
-        if (f->left == nullptr) {
-            f->mtx.unlock();
+    printf("erase %d\n", (int)t);
+    if (!find(t)) {
+        return;
+    }
+    root_mtx.lock();
+    printf("root lock locked\n");
+    printf("root node value %d\n", (int)root->val);
+    // if (root == nullptr) {
+    //     root_mtx.unlock();
+    //     return;
+    // }
+    node_t *parent = root;
+    node_t *cur;
+    if (t == parent->val) {
+        printf("erase root\n");
+        parent->mtx.lock();
+        printf("root node locked\n");
+        erase_helper(parent, nullptr);
+        root_mtx.unlock();
+        _size--;
+        return;
+    } else if (t < parent->val) {
+        cur = parent->left;
+    } else {
+        cur = parent->right;
+    }
+    parent->mtx.lock();
+    root_mtx.unlock();
+    if (cur != nullptr) cur->mtx.lock();
+    while (cur != nullptr) {
+        if (cur->val == t) {
+            erase_helper(cur, parent);
+            _size--;
             return;
         }
-    } else {
-        if (f->right == nullptr) {
-            f->mtx.unlock();
-            return;
+        node_t *old_parent = parent;
+        parent = cur;
+        if (t < parent->val) {
+            cur = parent->left;
+        } else {
+            cur = parent->right;
         }
+        old_parent->mtx.unlock();
+        if (cur != nullptr) cur->mtx.lock();
     }
-    std::shared_ptr<node_t> s;
-    if (dir == 'L') {
-        s = f->left;
+    parent->mtx.unlock();
+}
+
+template<typename T>
+bool FineGrainedBST<T>::find(const T& t) {
+    root_mtx.lock();
+    if (root == nullptr) {
+        root_mtx.unlock();
+        return false;
     } else {
-        s = f->right;
+        node_t *parent = root;
+        node_t *cur;
+        if (t == parent->val) {
+            root_mtx.unlock();
+            return true;
+        } else if (t < parent->val) {
+            cur = parent->left;
+        } else {
+            cur = parent->right;
+        }
+        parent->mtx.lock();
+        root_mtx.unlock();
+        if (cur != nullptr) cur->mtx.lock();
+        while (cur != nullptr) {
+            node_t *old_parent = parent;
+            parent = cur;
+            if (t == parent->val) {
+                old_parent->mtx.unlock();
+                parent->mtx.unlock();
+                return true;
+            } else if (t < parent->val) {
+                cur = parent->left;
+            } else {
+                cur = parent->right;
+            }
+            old_parent->mtx.unlock();
+            if (cur != nullptr) cur->mtx.lock();
+        }
+        parent->mtx.unlock();
+        return false;
     }
-    s->mtx.lock();
-    deletion_by_rotation(f, dir);
-    _size--;
 }
 
 template<typename T>
