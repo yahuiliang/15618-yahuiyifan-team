@@ -251,6 +251,8 @@ class FineGrainedBST : public BST<T> {
     std::atomic<size_t> _size;
     std::pair<std::shared_ptr<node_t>, Dir> find_helper(std::shared_ptr<node_t>& node, const T& element) const;
     std::vector<std::shared_ptr<node_t>> rotation(std::shared_ptr<node_t>& a, Dir dir1, Dir dir2);
+    void remove(std::shared_ptr<node_t>& a, Dir dir1, Dir dir2);
+    void erase_by_rotation(std::shared_ptr<node_t>& f, Dir dir);
 public:
     FineGrainedBST();
     virtual ~FineGrainedBST();
@@ -316,6 +318,23 @@ FineGrainedBST<T>::find_helper(std::shared_ptr<node_t>& node, const T& element) 
         return find_helper(node, element);
     }
     return std::pair<std::shared_ptr<node_t>, Dir>(node, dir);
+}
+
+template<typename T>
+void FineGrainedBST<T>::remove(std::shared_ptr<typename FineGrainedBST<T>::node_t>& a, Dir dir1, Dir dir2) {
+    std::shared_ptr<node_t> b = a->children[dir1];
+    std::shared_ptr<node_t> c = b->children[dir2];
+    a->children[dir1] = c;
+    b->children[dir2] = c;
+    b->back = a;
+    b->color = Color::Blue;
+    a->mtx.unlock();
+    b->mtx.unlock();
+}
+
+template<typename T>
+void FineGrainedBST<T>::erase_by_rotation(std::shared_ptr<typename FineGrainedBST<T>::node_t>& f, Dir dir) {
+    
 }
 
 template<typename T>
