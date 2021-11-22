@@ -1,5 +1,6 @@
 # Concurrent Binary Search Tree
 Here is the PDF version of [project proposal](./Project_Proposal.pdf).
+Here is the PDF version of [milestone report](./Milestone_Report.pdf).
 
 ## SUMMARY
 We want to implement 3 - 4 concurrent version of binary search tree (BST) data structures, including BST protected by single coarse-grained lock, fine-grained lock protected BST, lock free version BST and a transactional memory version BST if we have time. We will do experiments and measure the performance of each version on different workloads and concurrent thread count to analyze the pros and cons of each implementation and compare their performance.
@@ -64,8 +65,41 @@ We are going to use C++ to implement our data structures. Our team members are m
 | Week | Date | Tasks | Done |
 | --- | --- | :-: | :-: |
 | 1 | 11.1 - 11.7 | Proposal <br> Literature review <br> Coarse-grained lock version BST | Yes |
-| 2 | 11.8 - 11.14 | Fine-grained lock version BST <br> Lock-free version BST | No |
-| 3 | 11.15 - 11.21 | Lock-free version BST <br> Transactional memory version BST <br> Milestone report | No |
+| 2 | 11.8 - 11.14 | Fine-grained lock version BST <br> Lock-free version BST | Fine-grained version finished (Memory release problem not solved) <br> Lock-free version started |
+| 3 | 11.15 - 11.21 | Lock-free version BST <br> Transactional memory version BST <br> Milestone report | Lock-free version started <br> Transactional memory version not started yet |
 | 4 | 11.22 - 11.28 | Transactional memory version BST <br> Experiment workload generation | No |
 | 5 | 11.29 - 12.5 | Experiments and analysis | No |
 | 6 | 12.6 - 12.10 | Final report <br> Poster | No |
+
+## Checkpoint
+### Schedule
+We are behind schedule for the time being.  Part of the reason is that we just had exam, and we did not take itinto consideration when making the schedule.  However, the main reason is that we met the problem of safe releaseof memory.  When erasing a node, we cannot immediately release the memory of the node because there may beother threads accessing the memory.  The paper we referenced did not describe how to do garbage collection indetail.  Locking the whole tree and do garbage collection periodically will hurt performance too much.  We alsotried using smart shared pointer in C++, but it is too expensive, and thus it also hurts the performance a lot.We decided to implement the hazard pointer method, which will be implemented earlier next week.  We adjustedour schedule, and implementing the transactional memory version of BST will be a depending task depending onour future progress.
+
+### Summary
+We have finished literature review about fine-grained, lock-free, and transactional memory versions of BST. Wehave implemented the coarse-grained lock version BST. It is based on the simple single-thread BST and addinga lock for the whole tree.  We have implemented the fine-grained lock version BST. It is mainly based on theidea  of  hand-over-hand  lock.   For  the  erase  operation,  the  paper  we  referenced  adopted  the  method  to  rotatethe node to be erased to leaf position if it is not at the first place so that the tree may be more balanced andbenefit future operations on tree.  We have finished implementing the basic operations while releasing memoryonly when destructing the tree due to the safe memory release problem caused by multiple threads.  However,this implementation cannot scale to support 100,000 erases.  Therefore, we have been seeking ways to resolve thesafe memory release problem, and decided to implement hazard pointer.
+
+### Goal and Deliverable
+#### Plan to achieve
+- Implement the tree with coarse-grained lock supported
+- Implement the tree with fine-grained lock supported
+- Implement the tree without locking mechanism
+- Generate different insertion and deletion workloads
+- Verify the correctness of three implementations
+- Carry out experiments on different implementations of BST with different thread count and workloads
+- Analyze performance, pros and cons of each BST implementation
+
+#### Hope to achieve
+- Transactional memory based concurrent tree implementation
+- Fine-grained tree balancing
+- Lock-free tree balancing
+
+We have reached the first goal and almost reached the second goal.  We also achieved the fifth goal for coarse-grained lock and current fine-grained lock versions of BST. We moved the goal to implement the transactionalmemory version BST to hope to achieve goal since we spent more time on solving the safe memory release problem.We also achieved the fine-grained tree balancing goal in the hope to achieve goals to some extent.  The algorithmof erasing we chose for fine-grained tree is to keep rotating the tree until the node to be erased is a leaf node.Rotating will likely balance the tree, although the balancing may not be perfect since we are not rotating basedon height difference.
+
+#### What to show
+We plan to show several speedup graphs during our post session.  The speedup graphs will be about Speedupof different BST implementations vs.  thread count when using different workloads.  There will be one graph foreach workload.  These speedup graphs can help people know which BST performs best under different scenarios.
+
+### Preliminary Results
+When deciding whether we can use C++ smart shared pointer to resolve the safe memory release problem, we tested time needed for the fine-grained lock BST implemented by shared pointer to insert and search 100,000 different elements, and the result is 2.42 seconds. We then tested time needed for the coarse-grained lock BST to insert and search 100,000 different elements, and the result is 1.542 seconds. Therefore, we found out that shared pointers are too expensive to use and will hurt the performance so bad that the fine-grained lock BST will even be slower than the coarse-grained lock BST. We think the reason is that shared pointer objects will need to maintain the reference count of the memory location. When different threads are accessing the same memory location, the reference count will be read and written by different threads, causing frequent invalidations to maintain cache coherence and much internal communication traffic, so the overhead of using shared pointers is very high. Therefore, we decided that we cannot use shared pointer, but will implement the hazard pointer method.
+
+### Concerns
+The main concern we have now is how to implement hazard pointer efficiently. The hazard pointer will be used both in fine-grained lock BST and lock-free BST, and after implementing it, we think we can adjust fine-grained lock BST and implement lock-free BST quite quickly.
