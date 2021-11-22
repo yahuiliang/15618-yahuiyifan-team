@@ -232,27 +232,34 @@ class FineGrainedBST : public BST<T> {
         White, Blue
     };
     struct node_t {
-        std::shared_ptr<node_t> children[2];
-        std::shared_ptr<node_t> back;
+        node_t* children[2];
+        node_t* back;
         std::mutex mtx;
         T val;
         Color color;
         node_t() {
-            memset(&val, 0, sizeof(T));
-            color = Color::White;
+            init();
         }
 
         node_t(const T& _val) {
+            init();
             val = _val;
+        }
+
+        void init() {
+            children[Dir::Left] = nullptr;
+            children[Dir::Right] = nullptr;
+            back = nullptr;
+            memset(&val, 0, sizeof(T));
             color = Color::White;
         }
     };
-    std::shared_ptr<node_t> root;
+    node_t* root;
     std::atomic<size_t> _size;
-    std::pair<std::shared_ptr<node_t>, Dir> find_helper(std::shared_ptr<node_t>& node, const T& element) const;
-    std::vector<std::shared_ptr<node_t>> rotation(std::shared_ptr<node_t>& a, Dir dir1, Dir dir2);
-    void remove(std::shared_ptr<node_t>& a, Dir dir1, Dir dir2);
-    void erase_by_rotation(std::shared_ptr<node_t>& f, Dir dir);
+    std::pair<node_t*, Dir> find_helper(node_t* node, const T& element) const;
+    std::vector<node_t*> rotation(node_t* a, Dir dir1, Dir dir2);
+    void clear(node_t* node);
+    void remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, Dir dir2);
 public:
     FineGrainedBST();
     virtual ~FineGrainedBST();
@@ -268,27 +275,39 @@ public:
 };
 
 template<typename T>
-FineGrainedBST<T>::FineGrainedBST(): root(std::make_shared<node_t>()), _size(0) {}
+FineGrainedBST<T>::FineGrainedBST(): root(new node_t()), _size(0) {}
 
 template<typename T>
 FineGrainedBST<T>::~FineGrainedBST() {
     clear();
+    delete root;
 }
 
 template<typename T>
 void FineGrainedBST<T>::clear() {
-    root = std::make_shared<node_t>();
+    clear(root);
+    root = new node_t();
+}
+
+template<typename T>
+void FineGrainedBST<T>::clear(node_t* node) {
+    if (node == nullptr) {
+        return;
+    }
+    clear(node->children[Dir::Left]);
+    clear(node->children[Dir::Right]);
+    delete node;
 }
 
 template<typename T>
 bool FineGrainedBST<T>::insert(const T& t) {
-    std::pair<std::shared_ptr<node_t>, Dir> fdir = find_helper(root, t);
-    std::shared_ptr<node_t> parent = fdir.first;
+    std::pair<node_t*, Dir> fdir = find_helper(root, t);
+    node_t* parent = fdir.first;
     Dir dir = fdir.second;
-    std::shared_ptr<node_t> child = parent->children[dir];
+    node_t* child = parent->children[dir];
     bool inserted = false;
     if (child == nullptr) {
-        parent->children[dir] = std::make_shared<node_t>(t);
+        parent->children[dir] = new node_t(t);
         _size++;
         inserted = true;
     }
@@ -297,15 +316,14 @@ bool FineGrainedBST<T>::insert(const T& t) {
 }
 
 template<typename T>
-std::pair<std::shared_ptr<typename FineGrainedBST<T>::node_t>, typename FineGrainedBST<T>::Dir> 
-FineGrainedBST<T>::find_helper(std::shared_ptr<node_t>& node, const T& element) const {
+std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> FineGrainedBST<T>::find_helper(node_t* node, const T& element) const {
     Dir dir;
     if (element < node->val) {
         dir = Dir::Left;
     } else {
         dir = Dir::Right;
     }
-    std::shared_ptr<node_t> child = node->children[dir];
+    node_t* child = node->children[dir];
     if (child != nullptr && child->val != element) {
         return find_helper(child, element);
     }
@@ -317,13 +335,18 @@ FineGrainedBST<T>::find_helper(std::shared_ptr<node_t>& node, const T& element) 
         node->mtx.unlock();
         return find_helper(node, element);
     }
-    return std::pair<std::shared_ptr<node_t>, Dir>(node, dir);
+    return std::pair<node_t*, Dir>(node, dir);
 }
 
 template<typename T>
-void FineGrainedBST<T>::remove(std::shared_ptr<typename FineGrainedBST<T>::node_t>& a, Dir dir1, Dir dir2) {
-    std::shared_ptr<node_t> b = a->children[dir1];
-    std::shared_ptr<node_t> c = b->children[dir2];
+void FineGrainedBST<T>::erase(const T& t) {
+    
+}
+
+template<typename T>
+void FineGrainedBST<T>::remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, Dir dir2) {
+    node_t* b = a->children[dir1];
+    node_t* c = b->children[dir2];
     a->children[dir1] = c;
     b->children[dir2] = c;
     b->back = a;
@@ -333,21 +356,11 @@ void FineGrainedBST<T>::remove(std::shared_ptr<typename FineGrainedBST<T>::node_
 }
 
 template<typename T>
-void FineGrainedBST<T>::erase_by_rotation(std::shared_ptr<typename FineGrainedBST<T>::node_t>& f, Dir dir) {
-    
-}
-
-template<typename T>
-void FineGrainedBST<T>::erase(const T& t) {
-    
-}
-
-template<typename T>
-std::vector<std::shared_ptr<typename FineGrainedBST<T>::node_t>> FineGrainedBST<T>::rotation(std::shared_ptr<node_t>& a, Dir dir1, Dir dir2) {
-    std::shared_ptr<node_t> b = a->children[dir1];
-    std::shared_ptr<node_t> c = b->children[dir2];
-    std::shared_ptr<node_t> b_new = std::make_shared<node_t>();
-    std::shared_ptr<node_t> c_new = std::make_shared<node_t>();
+std::vector<typename FineGrainedBST<T>::node_t*> FineGrainedBST<T>::rotation(node_t* a, Dir dir1, Dir dir2) {
+    node_t* b = a->children[dir1];
+    node_t* c = b->children[dir2];
+    node_t* b_new = new node_t();
+    node_t* c_new = new node_t();
     
     b_new->mtx.lock();
     c_new->mtx.lock();
@@ -373,10 +386,10 @@ std::vector<std::shared_ptr<typename FineGrainedBST<T>::node_t>> FineGrainedBST<
 
 template<typename T>
 bool FineGrainedBST<T>::find(const T& t) {
-    std::pair<std::shared_ptr<node_t>, Dir> fdir = find_helper(root, t);
-    std::shared_ptr<node_t> parent = fdir.first;
+    std::pair<node_t*, Dir> fdir = find_helper(root, t);
+    node_t* parent = fdir.first;
     Dir dir = fdir.second;
-    std::shared_ptr<node_t> child = parent->children[dir];
+    node_t* child = parent->children[dir];
     bool found = child != nullptr;
     parent->mtx.unlock();
     return found;
