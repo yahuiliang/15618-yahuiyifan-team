@@ -260,6 +260,7 @@ class FineGrainedBST : public BST<T> {
     std::vector<node_t*> rotation(node_t* a, Dir dir1, Dir dir2);
     void clear(node_t* node);
     void remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, Dir dir2);
+    void deletion_by_rotation(node_t* f, Dir dir);
 public:
     FineGrainedBST();
     virtual ~FineGrainedBST();
@@ -340,7 +341,47 @@ std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> 
 
 template<typename T>
 void FineGrainedBST<T>::erase(const T& t) {
-    
+    std::pair<node_t*, Dir> fdir = find_helper(root, t);
+    node_t* parent = fdir.first;
+    Dir dir = fdir.second;
+    node_t* child = parent->children[dir];
+    if (child == nullptr) {
+        parent->mtx.unlock();
+    } else {
+        child->mtx.lock();
+        deletion_by_rotation(parent, dir);
+        _size--;
+    }
+}
+
+template<typename T>
+void FineGrainedBST<T>::deletion_by_rotation(typename FineGrainedBST<T>::node_t* f, Dir dir) {
+    node_t* s = f->children[dir];
+    if (s->children[Dir::Left] == nullptr) {
+        remove(f, dir, Dir::Right);
+    } else {
+        std::vector<node_t*> fgh = rotation(f, dir, Dir::Left);
+        f = fgh[0];
+        node_t* g = fgh[1];
+        node_t* h = fgh[2];
+        if (h->children[Dir::Left] == nullptr) {
+            deletion_by_rotation(g, Dir::Right);
+        } else {
+            deletion_by_rotation(g, Dir::Right);
+            f->mtx.lock();
+            if (g != f->children[dir] || f->color == Color::Blue) {
+                f->mtx.unlock();
+            } else {
+                g->mtx.lock();
+                std::vector<node_t*> fgh_new = rotation(f, dir, Dir::Right);
+                f = fgh_new[0];
+                node_t* g_new = fgh_new[1];
+                node_t* h_new = fgh_new[2];
+                g_new->mtx.unlock();
+                h_new->mtx.unlock();
+            }
+        }
+    }
 }
 
 template<typename T>

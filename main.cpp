@@ -12,7 +12,7 @@
 #define THREAD_NUM 100
 // #define INPUT_PRINT
 #define TEST_PARALLEL
-// #define TEST_ERASE
+#define TEST_ERASE
 
 static FineGrainedBST<int> bst;
 static std::mutex mtx;
