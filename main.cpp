@@ -1,4 +1,5 @@
 #include "bst.h"
+#include "hazard.h"
 #include <iostream>
 #include <cassert>
 #include <vector>
@@ -11,6 +12,7 @@
 #define RAND_RANGE 1000
 #define THREAD_NUM 100
 // #define INPUT_PRINT
+// #define TEST_CORRECTNESS
 #define TEST_PARALLEL
 #define TEST_ERASE
 
@@ -19,6 +21,7 @@ static std::mutex mtx;
 
 void test_single_thread() {
     bst.clear();
+    register_thread(0);
     std::vector<int> elements(TEST_SIZE);
     size_t n = elements.size();
     for (size_t i = 0; i < n; i++) {
@@ -56,6 +59,7 @@ void test_multi_thread() {
     std::vector<std::thread> threads(THREAD_NUM);
     for (size_t i = 0; i < THREAD_NUM; i++) {
         threads[i] = std::thread([](size_t thread_id) {
+            register_thread(thread_id);
             size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
             std::vector<int> elements(local_test_size, 0);
             int start = thread_id * local_test_size;
@@ -97,7 +101,9 @@ void test_multi_thread() {
 int main() {
     srand(time(NULL));
     auto start = std::chrono::high_resolution_clock::now();
+    #ifdef TEST_CORRECTNESS
     test_single_thread();
+    #endif
     #ifdef TEST_PARALLEL
     test_multi_thread();
     #endif
