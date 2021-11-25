@@ -1,5 +1,4 @@
 #include "bst.h"
-#include "hazard.h"
 #include <iostream>
 #include <cassert>
 #include <vector>
@@ -21,7 +20,7 @@ static std::mutex mtx;
 
 void test_single_thread() {
     bst.clear();
-    register_thread(0);
+    bst.register_thread(0);
     std::vector<int> elements(TEST_SIZE);
     size_t n = elements.size();
     for (size_t i = 0; i < n; i++) {
@@ -59,7 +58,7 @@ void test_multi_thread() {
     std::vector<std::thread> threads(THREAD_NUM);
     for (size_t i = 0; i < THREAD_NUM; i++) {
         threads[i] = std::thread([](size_t thread_id) {
-            register_thread(thread_id);
+            bst.register_thread(thread_id);
             size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
             std::vector<int> elements(local_test_size, 0);
             int start = thread_id * local_test_size;

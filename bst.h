@@ -1,13 +1,13 @@
 #ifndef BST_H
 #define BST_H
 
-#include "hazard.h"
 #include <stdio.h>
 #include <mutex>
 #include <atomic>
 #include <cstring>
 #include <vector>
 #include <memory>
+#include <unordered_set>
 
 template<typename T>
 class BST {
@@ -224,6 +224,10 @@ size_t CoarseGrainedBST<T>::size() {
     return _size;
 }
 
+#define N 100
+#define R 100
+#define K 15
+
 template<typename T>
 class FineGrainedBST : public BST<T> {
     enum Dir {
@@ -255,13 +259,22 @@ class FineGrainedBST : public BST<T> {
             color = Color::White;
         }
     };
+    static thread_local size_t thread_id;
+    std::vector<std::vector<node_t*>> hp_list;
+    std::vector<int> hp_offsets;
+    std::vector<std::vector<node_t*>> rlist;
+    std::vector<std::unordered_set<node_t*>> plist;
+
     node_t* root;
     std::atomic<size_t> _size;
-    std::pair<node_t*, Dir> find_helper(node_t* node, const T& element) const;
+    std::pair<node_t*, Dir> find_helper(node_t* node, const T& element);
     std::vector<node_t*> rotation(node_t* a, Dir dir1, Dir dir2);
     void clear(node_t* node);
     void remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, Dir dir2);
     void deletion_by_rotation(node_t* f, Dir dir);
+    void append_hp(node_t* ptr);
+    void scan();
+    void retire(node_t* ptr);
 public:
     FineGrainedBST();
     virtual ~FineGrainedBST();
@@ -274,10 +287,60 @@ public:
     virtual bool find(const T& t);
     virtual size_t size();
     virtual void clear();
+    void register_thread(size_t tid);
 };
 
 template<typename T>
-FineGrainedBST<T>::FineGrainedBST(): root(new node_t()), _size(0) {}
+thread_local size_t FineGrainedBST<T>::thread_id;
+
+template<typename T>
+void FineGrainedBST<T>::register_thread(size_t tid) {
+    thread_id = tid;
+}
+
+template<typename T>
+void FineGrainedBST<T>::append_hp(node_t* ptr) {
+    if (ptr == nullptr) return;
+    int offset = hp_offsets[thread_id];
+    hp_list[thread_id][offset] = ptr;
+    hp_offsets[thread_id] = (offset + 1) % K;
+}
+
+template<typename T>
+void FineGrainedBST<T>::scan() {
+    for (int tid = 0; tid < N; tid++) {
+        for (node_t* ptr : hp_list[tid]) {
+            if (ptr != nullptr) {
+                plist[thread_id].insert(ptr);
+            }
+        }
+    }
+    std::vector<node_t*> tmp_rlist = rlist[thread_id];
+    rlist[thread_id].clear();
+    for (node_t* ptr : tmp_rlist) {
+        if (plist[thread_id].find(ptr) != plist[thread_id].end()) {
+            rlist[thread_id].push_back(ptr);
+        } else {
+            delete ptr;
+        }
+    }
+    plist[thread_id].clear();
+}
+
+template<typename T>
+void FineGrainedBST<T>::retire(node_t* ptr) {
+    rlist[thread_id].push_back(ptr);
+    if (rlist[thread_id].size() > R) {
+        scan();
+    }
+}
+
+template<typename T>
+FineGrainedBST<T>::FineGrainedBST(): 
+    hp_list(N, std::vector<node_t*>(K, nullptr)), 
+    hp_offsets(N, 0), 
+    rlist(N), plist(N),
+    root(new node_t()), _size(0) {}
 
 template<typename T>
 FineGrainedBST<T>::~FineGrainedBST() {
@@ -321,7 +384,7 @@ bool FineGrainedBST<T>::insert(const T& t) {
 }
 
 template<typename T>
-std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> FineGrainedBST<T>::find_helper(node_t* node, const T& element) const {
+std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> FineGrainedBST<T>::find_helper(node_t* node, const T& element) {
     Dir dir;
     append_hp(node);
     append_hp(node->children[Dir::Left]);
@@ -415,7 +478,7 @@ void FineGrainedBST<T>::remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, 
     b->children[dir2] = c;
     b->back = a;
     b->color = Color::Blue;
-    retire<node_t>(b);
+    retire(b);
     a->mtx.unlock();
     b->mtx.unlock();
 }
@@ -446,10 +509,10 @@ std::vector<typename FineGrainedBST<T>::node_t*> FineGrainedBST<T>::rotation(nod
     
     b->back = a;
     b->color = Color::Blue;
-    retire<node_t>(b);
+    retire(b);
     c->back = c_new;
     c->color = Color::Blue;
-    retire<node_t>(c);
+    retire(c);
     a->mtx.unlock();
     b->mtx.unlock();
     c->mtx.unlock();
