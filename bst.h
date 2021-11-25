@@ -18,6 +18,7 @@ public:
     virtual bool find(const T& t)=0;
     virtual size_t size()=0;
     virtual void clear()=0;
+    virtual void register_thread(size_t tid)=0;
 };
 
 template<typename T>
@@ -51,6 +52,7 @@ public:
     virtual bool find(const T& t);
     virtual size_t size();
     virtual void clear();
+    virtual void register_thread(size_t tid) {};
 };
 
 template<typename T>
@@ -288,7 +290,7 @@ public:
     virtual bool find(const T& t);
     virtual size_t size();
     virtual void clear();
-    void register_thread(size_t tid);
+    virtual void register_thread(size_t tid);
 };
 
 template<typename T>
@@ -530,6 +532,7 @@ public:
     virtual bool find(const T& t)=0;
     virtual size_t size()=0;
     virtual void clear()=0;
+    virtual void register_thread(size_t tid) {}
 };
 
 template<typename T>

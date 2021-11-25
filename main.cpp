@@ -7,7 +7,7 @@
 #include <thread>
 #include <chrono>
 
-#define TEST_SIZE 1000000
+#define TEST_SIZE 500000
 #define RAND_RANGE 1000
 #define THREAD_NUM 100
 // #define INPUT_PRINT
@@ -20,7 +20,7 @@ static std::mutex mtx;
 
 void test_single_thread() {
     bst.clear();
-    // bst.register_thread(0);
+    bst.register_thread(0);
     std::vector<int> elements(TEST_SIZE);
     size_t n = elements.size();
     for (size_t i = 0; i < n; i++) {
