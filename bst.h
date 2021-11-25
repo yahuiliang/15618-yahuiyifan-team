@@ -312,6 +312,15 @@ void FineGrainedBST<T>::scan() {
         for (node_t* ptr : hp_list[tid]) {
             if (ptr != nullptr) {
                 plist[thread_id].insert(ptr);
+                if (ptr->children[Dir::Left]) {
+                    plist[thread_id].insert(ptr->children[Dir::Left]);
+                }
+                if (ptr->children[Dir::Right]) {
+                    plist[thread_id].insert(ptr->children[Dir::Right]);
+                }
+                if (ptr->back) {
+                    plist[thread_id].insert(ptr->back);
+                }
             }
         }
     }
@@ -329,6 +338,7 @@ void FineGrainedBST<T>::scan() {
 
 template<typename T>
 void FineGrainedBST<T>::retire(node_t* ptr) {
+    return;
     rlist[thread_id].push_back(ptr);
     if (rlist[thread_id].size() > R) {
         scan();
@@ -368,9 +378,9 @@ template<typename T>
 bool FineGrainedBST<T>::insert(const T& t) {
     std::pair<node_t*, Dir> fdir = find_helper(root, t);
     node_t* parent = fdir.first;
-    append_hp(parent);
-    append_hp(parent->children[Dir::Left]);
-    append_hp(parent->children[Dir::Right]);
+    // append_hp(parent);
+    // append_hp(parent->children[Dir::Left]);
+    // append_hp(parent->children[Dir::Right]);
     Dir dir = fdir.second;
     node_t* child = parent->children[dir];
     bool inserted = false;
@@ -386,9 +396,9 @@ bool FineGrainedBST<T>::insert(const T& t) {
 template<typename T>
 std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> FineGrainedBST<T>::find_helper(node_t* node, const T& element) {
     Dir dir;
-    append_hp(node);
-    append_hp(node->children[Dir::Left]);
-    append_hp(node->children[Dir::Right]);
+    // append_hp(node);
+    // append_hp(node->children[Dir::Left]);
+    // append_hp(node->children[Dir::Right]);
     if (element < node->val) {
         dir = Dir::Left;
     } else {
@@ -413,9 +423,9 @@ template<typename T>
 void FineGrainedBST<T>::erase(const T& t) {
     std::pair<node_t*, Dir> fdir = find_helper(root, t);
     node_t* parent = fdir.first;
-    append_hp(parent);
-    append_hp(parent->children[Dir::Left]);
-    append_hp(parent->children[Dir::Right]);
+    // append_hp(parent);
+    // append_hp(parent->children[Dir::Left]);
+    // append_hp(parent->children[Dir::Right]);
     Dir dir = fdir.second;
     node_t* child = parent->children[dir];
     if (child == nullptr) {
@@ -429,9 +439,9 @@ void FineGrainedBST<T>::erase(const T& t) {
 
 template<typename T>
 void FineGrainedBST<T>::deletion_by_rotation(typename FineGrainedBST<T>::node_t* f, Dir dir) {
-    append_hp(f);
-    append_hp(f->children[Dir::Left]);
-    append_hp(f->children[Dir::Right]);
+    // append_hp(f);
+    // append_hp(f->children[Dir::Left]);
+    // append_hp(f->children[Dir::Right]);
     node_t* s = f->children[dir];
     if (s->children[Dir::Left] == nullptr) {
         remove(f, dir, Dir::Right);
@@ -440,15 +450,15 @@ void FineGrainedBST<T>::deletion_by_rotation(typename FineGrainedBST<T>::node_t*
         f = fgh[0];
         node_t* g = fgh[1];
         node_t* h = fgh[2];
-        append_hp(f);
-        append_hp(g);
-        append_hp(h);
+        // append_hp(f);
+        // append_hp(g);
+        // append_hp(h);
         if (h->children[Dir::Left] == nullptr) {
             deletion_by_rotation(g, Dir::Right);
         } else {
             deletion_by_rotation(g, Dir::Right);
-            append_hp(f);
-            append_hp(g);
+            // append_hp(f);
+            // append_hp(g);
             f->mtx.lock();
             if (g != f->children[dir] || f->color == Color::Blue) {
                 f->mtx.unlock();
@@ -456,11 +466,11 @@ void FineGrainedBST<T>::deletion_by_rotation(typename FineGrainedBST<T>::node_t*
                 g->mtx.lock();
                 std::vector<node_t*> fgh_new = rotation(f, dir, Dir::Right);
                 f = fgh_new[0];
-                append_hp(f);
+                // append_hp(f);
                 node_t* g_new = fgh_new[1];
-                append_hp(g_new);
+                // append_hp(g_new);
                 node_t* h_new = fgh_new[2];
-                append_hp(h_new);
+                // append_hp(h_new);
                 g_new->mtx.unlock();
                 h_new->mtx.unlock();
             }
@@ -470,9 +480,9 @@ void FineGrainedBST<T>::deletion_by_rotation(typename FineGrainedBST<T>::node_t*
 
 template<typename T>
 void FineGrainedBST<T>::remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, Dir dir2) {
-    append_hp(a);
+    // append_hp(a);
     node_t* b = a->children[dir1];
-    append_hp(b);
+    // append_hp(b);
     node_t* c = b->children[dir2];
     a->children[dir1] = c;
     b->children[dir2] = c;
@@ -485,15 +495,15 @@ void FineGrainedBST<T>::remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, 
 
 template<typename T>
 std::vector<typename FineGrainedBST<T>::node_t*> FineGrainedBST<T>::rotation(node_t* a, Dir dir1, Dir dir2) {
-    append_hp(a);
+    // append_hp(a);
     node_t* b = a->children[dir1];
-    append_hp(b);
+    // append_hp(b);
     node_t* c = b->children[dir2];
-    append_hp(c);
+    // append_hp(c);
     node_t* b_new = new node_t();
-    append_hp(b_new);
+    // append_hp(b_new);
     node_t* c_new = new node_t();
-    append_hp(c_new);
+    // append_hp(c_new);
     
     b_new->mtx.lock();
     c_new->mtx.lock();
@@ -523,7 +533,7 @@ template<typename T>
 bool FineGrainedBST<T>::find(const T& t) {
     std::pair<node_t*, Dir> fdir = find_helper(root, t);
     node_t* parent = fdir.first;
-    append_hp(parent);
+    // append_hp(parent);
     Dir dir = fdir.second;
     node_t* child = parent->children[dir];
     bool found = child != nullptr;
