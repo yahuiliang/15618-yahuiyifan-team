@@ -9,6 +9,7 @@
 #include <memory>
 #include <unordered_set>
 #include <condition_variable>
+#include <climits>
 
 template<typename T>
 class BST {
@@ -565,11 +566,11 @@ class LockFreeBST : public BST<T> {
 
     // atomic_size_t set_flag(atomic_size_t addr);
     // atomic_size_t set_tag(atomic_size_t addr);
-    bool is_flagged(atomic_size_t addr);
-    bool is_tagged(atomic_size_t addr);
-    node_t *get_addr(atomic_size_t addr);
+    bool is_flagged(size_t addr);
+    bool is_tagged(size_t addr);
+    node_t *get_addr(size_t addr);
 
-    void clear(atomic_size_t node_addr);
+    void clear(size_t node_addr);
     void seek(const T& key, struct seekRecord_t *seekRecord);
 public:
     LockFreeBST();
@@ -587,15 +588,26 @@ LockFreeBST<T>::LockFreeBST() {
     _size = 0;
     node_t *R_root_n = new node_t(INFINITY_2);
     node_t *S_root_n = new node_t(INFINITY_1);
+    // printf("R_root: %zu\n", (size_t)R_root_n);
+    // printf("S_root: %zu\n", (size_t)S_root_n);
+
     R_root = reinterpret_cast<size_t>(R_root_n);
     S_root = reinterpret_cast<size_t>(S_root_n);
     node_t *sentinel_node_0 = new node_t(INFINITY_0);
     node_t *sentinel_node_1 = new node_t(INFINITY_1);
     node_t *sentinel_node_2 = new node_t(INFINITY_2);
-    S_root_n->left = reinterpret_cast<size_t>(sentinel_node_0);
-    S_root_n->right = reinterpret_cast<size_t>(sentinel_node_1);
-    R_root_n->left = S_root;
-    R_root_n->right = reinterpret_cast<size_t>(sentinel_node_2);
+    // printf("sentinel_node_0: %zu\n", (size_t)sentinel_node_0);
+    // printf("sentinel_node_1: %zu\n", (size_t)sentinel_node_1);
+    // printf("sentinel_node_2: %zu\n", (size_t)sentinel_node_2);
+
+    size_t zero = 0;
+    std::atomic_compare_exchange_weak(&(S_root_n->left), &zero, reinterpret_cast<size_t>(sentinel_node_0));
+    std::atomic_compare_exchange_weak(&(S_root_n->right), &zero, reinterpret_cast<size_t>(sentinel_node_1));
+    std::atomic_compare_exchange_weak(&(R_root_n->left), &zero, S_root);
+    std::atomic_compare_exchange_weak(&(R_root_n->right), &zero, reinterpret_cast<size_t>(sentinel_node_2));
+    // printf("S_left: %zu\n", (size_t)(get_addr(S_root.load())->left).load());
+    // printf("S_right: %zu\n", (size_t)(get_addr(S_root.load())->right).load());
+    // printf("R_right: %zu\n", (size_t)(get_addr(R_root.load())->right).load());
 }
 
 template<typename T>
@@ -614,34 +626,40 @@ LockFreeBST<T>::~LockFreeBST() {
 // }
 
 template<typename T>
-bool LockFreeBST<T>::is_flagged(atomic_size_t addr) {
+bool LockFreeBST<T>::is_flagged(size_t addr) {
     return (bool)(addr & flag_mask);
 }
 
 template<typename T>
-bool LockFreeBST<T>::is_tagged(atomic_size_t addr) {
+bool LockFreeBST<T>::is_tagged(size_t addr) {
     return (bool)((addr & tag_mask) >> 1);
 }
 
 template<typename T>
-typename LockFreeBST<T>::node_t *LockFreeBST<T>::get_addr(atomic_size_t addr) {
+typename LockFreeBST<T>::node_t *LockFreeBST<T>::get_addr(size_t addr) {
+    // printf("addr: %zu\n", addr);
+    if (addr == 0) {
+        return nullptr;
+    }
     return (node_t *)(addr & addr_mask);
 }
 
 template<typename T>
 void LockFreeBST<T>::seek(const T& key, struct seekRecord_t *seekRecord) {
-    printf("seek %d\n", (int)key);
+    // printf("seek %d\n", (int)key);
     // Init the seek record
     seekRecord->ancestor = R_root;
     seekRecord->successor = S_root;
     seekRecord->parent = S_root;
-    seekRecord->leaf = reinterpret_cast<size_t>((get_addr(get_addr(S_root)->left)));
+    size_t S_left = (get_addr(S_root.load())->left).load();
+    // printf("s_left: %zu\n", S_left);
+    seekRecord->leaf = reinterpret_cast<size_t>(get_addr(S_left));
     // Init variables used in traversal
-    // TODO: make sure whether can use size_t instead of atomic_size_t
     size_t parentField = get_addr(seekRecord->parent)->left;
-    size_t currentField = seekRecord->leaf->left;
+    size_t currentField = get_addr(seekRecord->leaf)->left;
     node_t *current = get_addr(currentField);
     // Traverse tree
+    // printf("start traversal\n");
     while (current != nullptr) {
         // Check if the edge from the parent node is tagged
         if (!is_tagged(parentField)) {
@@ -655,9 +673,9 @@ void LockFreeBST<T>::seek(const T& key, struct seekRecord_t *seekRecord) {
         // Update other traversal variables
         parentField = currentField;
         if (key < current->key) {
-            currentField = current->left;
+            currentField = (current->left).load();
         } else {
-            currentField = current->right;
+            currentField = (current->right).load();
         }
         current = get_addr(currentField);
     }
@@ -665,13 +683,14 @@ void LockFreeBST<T>::seek(const T& key, struct seekRecord_t *seekRecord) {
 
 template<typename T>
 bool LockFreeBST<T>::insert(const T& t) {
-    printf("insert %d\n", (int)t);
+    // printf("insert %d\n", (int)t);
     while (true) {
         struct seekRecord_t seekRecord;
         seek(t, &seekRecord);
-        if (get_addr(seekRecord->leaf)->key != t) {
-            atomic_size_t parent = seekRecord.parent;
-            atomic_size_t leaf = seekRecord.leaf;
+        // printf("*********\n");
+        if (get_addr(seekRecord.leaf)->key != t) {
+            size_t parent = seekRecord.parent;
+            size_t leaf = seekRecord.leaf;
             node_t *parent_n = get_addr(parent);
             node_t *leaf_n = get_addr(leaf);
 
@@ -690,10 +709,13 @@ bool LockFreeBST<T>::insert(const T& t) {
             size_t internal = reinterpret_cast<size_t>(newInternal);
             
             bool result;
+            // printf("=========\n");
             if (t < parent_n->key) {
-                result = parent_n->left.compare_exchange_weak(old_leaf, internal);
+                result = std::atomic_compare_exchange_weak(&(parent_n->left), &old_leaf, internal);
+                // result = parent_n->left.compare_exchange_weak(old_leaf, internal);
             } else {
-                result = parent_n->right.compare_exchange_weak(old_leaf, internal);
+                result = std::atomic_compare_exchange_weak(&(parent_n->right), &old_leaf, internal);
+                // result = parent_n->right.compare_exchange_weak(old_leaf, internal);
             }
             if (result) {
                 _size++;
@@ -731,17 +753,19 @@ size_t LockFreeBST<T>::size() {
 
 template<typename T>
 void LockFreeBST<T>::clear() {
-    clear(R_root);
+    clear(R_root.load());
 }
 
 template<typename T>
-void LockFreeBST<T>::clear(atomic_size_t node_addr) {
+void LockFreeBST<T>::clear(size_t node_addr) {
     if (node_addr == 0) {
         return;
     }
     node_t *node = get_addr(node_addr);
-    clear(node->left);
-    clear(node->right);
+    size_t left = node->left.load();
+    size_t right = node->right.load();
+    clear(left);
+    clear(right);
     delete node;
     // root = nullptr;
 }

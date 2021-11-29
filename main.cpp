@@ -11,15 +11,15 @@
 #define RAND_RANGE 1000
 #define THREAD_NUM 100
 // #define INPUT_PRINT
-#define TEST_CORRECTNESS
+// #define TEST_CORRECTNESS
 #define TEST_PARALLEL
-#define TEST_ERASE
+// #define TEST_ERASE
 
-static FineGrainedBST<int> bst;
+static LockFreeBST<int> bst;
 static std::mutex mtx;
 
 void test_single_thread() {
-    bst.clear();
+    // bst.clear();
     bst.register_thread(0);
     std::vector<int> elements(TEST_SIZE);
     size_t n = elements.size();
@@ -54,7 +54,7 @@ void test_single_thread() {
 }
 
 void test_multi_thread() {
-    bst.clear();
+    // bst.clear();
     std::vector<std::thread> threads(THREAD_NUM);
     for (size_t i = 0; i < THREAD_NUM; i++) {
         threads[i] = std::thread([](size_t thread_id) {
