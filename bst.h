@@ -524,20 +524,189 @@ size_t FineGrainedBST<T>::size() {
     return _size.load();
 }
 
+#define INFINITY_0 INT_MAX - 2
+#define INFINITY_1 INT_MAX - 1
+#define INFINITY_2 INT_MAX
+
+static size_t flag_mask = 0x1;
+static size_t tag_mask = 0x2;
+static size_t addr_mask = ~(size_t)0xF;
+
+typedef std::atomic<size_t> atomic_size_t;
+
 template<typename T>
 class LockFreeBST : public BST<T> {
+    struct node_t {
+        T key;
+        atomic_size_t left;
+        atomic_size_t right;
+
+        node_t(const T& _key) {
+            left = 0;
+            right = 0;
+            key = _key;
+        }
+
+        node_t() {
+            left = 0;
+            right = 0;
+        }
+    };
+    struct seekRecord_t {
+        size_t ancestor;
+        size_t successor;
+        size_t parent;
+        size_t leaf;
+    };
+    atomic_size_t R_root;
+    atomic_size_t S_root;
+
+    atomic_size_t _size;
+
+    // atomic_size_t set_flag(atomic_size_t addr);
+    // atomic_size_t set_tag(atomic_size_t addr);
+    bool is_flagged(atomic_size_t addr);
+    bool is_tagged(atomic_size_t addr);
+    node_t *get_addr(atomic_size_t addr);
+
+    void clear(atomic_size_t node_addr);
+    void seek(const T& key, struct seekRecord_t *seekRecord);
 public:
-    virtual bool insert(const T& t)=0;
-    virtual void erase(const T& t)=0;
-    virtual bool find(const T& t)=0;
-    virtual size_t size()=0;
-    virtual void clear()=0;
+    LockFreeBST();
+    virtual ~LockFreeBST();
+    virtual bool insert(const T& t);
+    virtual void erase(const T& t);
+    virtual bool find(const T& t);
+    virtual size_t size();
+    virtual void clear();
     virtual void register_thread(size_t tid) {}
 };
 
 template<typename T>
+LockFreeBST<T>::LockFreeBST() {
+    _size = 0;
+    node_t *R_root_n = new node_t(INFINITY_2);
+    node_t *S_root_n = new node_t(INFINITY_1);
+    R_root = reinterpret_cast<size_t>(R_root_n);
+    S_root = reinterpret_cast<size_t>(S_root_n);
+    node_t *sentinel_node_0 = new node_t(INFINITY_0);
+    node_t *sentinel_node_1 = new node_t(INFINITY_1);
+    node_t *sentinel_node_2 = new node_t(INFINITY_2);
+    S_root_n->left = reinterpret_cast<size_t>(sentinel_node_0);
+    S_root_n->right = reinterpret_cast<size_t>(sentinel_node_1);
+    R_root_n->left = S_root;
+    R_root_n->right = reinterpret_cast<size_t>(sentinel_node_2);
+}
+
+template<typename T>
+LockFreeBST<T>::~LockFreeBST() {
+    clear();
+}
+
+// template<typename T>
+// atomic_size_t LockFreeBST<T>::set_flag(atomic_size_t addr) {
+//     return addr | flag_mask;
+// }
+
+// template<typename T>
+// atomic_size_t LockFreeBST<T>::set_tag(atomic_size_t addr) {
+//     return addr | tag_mask;
+// }
+
+template<typename T>
+bool LockFreeBST<T>::is_flagged(atomic_size_t addr) {
+    return (bool)(addr & flag_mask);
+}
+
+template<typename T>
+bool LockFreeBST<T>::is_tagged(atomic_size_t addr) {
+    return (bool)((addr & tag_mask) >> 1);
+}
+
+template<typename T>
+typename LockFreeBST<T>::node_t *LockFreeBST<T>::get_addr(atomic_size_t addr) {
+    return (node_t *)(addr & addr_mask);
+}
+
+template<typename T>
+void LockFreeBST<T>::seek(const T& key, struct seekRecord_t *seekRecord) {
+    printf("seek %d\n", (int)key);
+    // Init the seek record
+    seekRecord->ancestor = R_root;
+    seekRecord->successor = S_root;
+    seekRecord->parent = S_root;
+    seekRecord->leaf = reinterpret_cast<size_t>((get_addr(get_addr(S_root)->left)));
+    // Init variables used in traversal
+    // TODO: make sure whether can use size_t instead of atomic_size_t
+    size_t parentField = get_addr(seekRecord->parent)->left;
+    size_t currentField = seekRecord->leaf->left;
+    node_t *current = get_addr(currentField);
+    // Traverse tree
+    while (current != nullptr) {
+        // Check if the edge from the parent node is tagged
+        if (!is_tagged(parentField)) {
+            // Advance ancestor and successor
+            seekRecord->ancestor = seekRecord->parent;
+            seekRecord->successor = seekRecord->leaf;
+        }
+        // Advance parent and leaf
+        seekRecord->parent = seekRecord->leaf;
+        seekRecord->leaf = reinterpret_cast<size_t>(current);
+        // Update other traversal variables
+        parentField = currentField;
+        if (key < current->key) {
+            currentField = current->left;
+        } else {
+            currentField = current->right;
+        }
+        current = get_addr(currentField);
+    }
+}
+
+template<typename T>
 bool LockFreeBST<T>::insert(const T& t) {
-    return false;
+    printf("insert %d\n", (int)t);
+    while (true) {
+        struct seekRecord_t seekRecord;
+        seek(t, &seekRecord);
+        if (get_addr(seekRecord->leaf)->key != t) {
+            atomic_size_t parent = seekRecord.parent;
+            atomic_size_t leaf = seekRecord.leaf;
+            node_t *parent_n = get_addr(parent);
+            node_t *leaf_n = get_addr(leaf);
+
+            node_t *new_leaf = new node_t(t);
+            node_t *newInternal = new node_t();
+            if (t < leaf_n->key) {
+                newInternal->key = leaf_n->key;
+                newInternal->left = reinterpret_cast<size_t>(new_leaf);
+                newInternal->right = leaf;
+            } else {
+                newInternal->key = t;
+                newInternal->left = leaf;
+                newInternal->right = reinterpret_cast<size_t>(new_leaf);
+            }
+            size_t old_leaf = leaf & addr_mask;
+            size_t internal = reinterpret_cast<size_t>(newInternal);
+            
+            bool result;
+            if (t < parent_n->key) {
+                result = parent_n->left.compare_exchange_weak(old_leaf, internal);
+            } else {
+                result = parent_n->right.compare_exchange_weak(old_leaf, internal);
+            }
+            if (result) {
+                _size++;
+                return true;
+            } else {
+                // help the conflicting delete operation
+            }
+        } 
+        // key existed in the tree
+        else {
+            return false;
+        }
+    }
 }
 
 template<typename T>
@@ -547,17 +716,34 @@ void LockFreeBST<T>::erase(const T& t) {
 
 template<typename T>
 bool LockFreeBST<T>::find(const T& t) {
+    struct seekRecord_t seekRecord;
+    seek(t, &seekRecord);
+    if (get_addr(seekRecord.leaf)->key == t) {
+        return true;
+    }
     return false;
 }
 
 template<typename T>
-size_t size() {
-    return 0;
+size_t LockFreeBST<T>::size() {
+    return _size.load();
 }
 
 template<typename T>
-void clear() {
+void LockFreeBST<T>::clear() {
+    clear(R_root);
+}
 
+template<typename T>
+void LockFreeBST<T>::clear(atomic_size_t node_addr) {
+    if (node_addr == 0) {
+        return;
+    }
+    node_t *node = get_addr(node_addr);
+    clear(node->left);
+    clear(node->right);
+    delete node;
+    // root = nullptr;
 }
 
 #endif
