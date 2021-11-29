@@ -5,19 +5,22 @@
 #include <climits>
 #include <unordered_set>
 #include <thread>
+#include <chrono>
 
-#define TEST_SIZE 100000
+#define TEST_SIZE 500000
 #define RAND_RANGE 1000
 #define THREAD_NUM 100
 // #define INPUT_PRINT
+#define TEST_CORRECTNESS
 #define TEST_PARALLEL
-// #define TEST_ERASE
+#define TEST_ERASE
 
 static FineGrainedBST<int> bst;
 static std::mutex mtx;
 
 void test_single_thread() {
     bst.clear();
+    bst.register_thread(0);
     std::vector<int> elements(TEST_SIZE);
     size_t n = elements.size();
     for (size_t i = 0; i < n; i++) {
@@ -55,6 +58,7 @@ void test_multi_thread() {
     std::vector<std::thread> threads(THREAD_NUM);
     for (size_t i = 0; i < THREAD_NUM; i++) {
         threads[i] = std::thread([](size_t thread_id) {
+            bst.register_thread(thread_id);
             size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
             std::vector<int> elements(local_test_size, 0);
             int start = thread_id * local_test_size;
@@ -95,9 +99,15 @@ void test_multi_thread() {
 
 int main() {
     srand(time(NULL));
+    auto start = std::chrono::high_resolution_clock::now();
+    #ifdef TEST_CORRECTNESS
     test_single_thread();
+    #endif
     #ifdef TEST_PARALLEL
     test_multi_thread();
     #endif
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    printf("test finished in %f\n", static_cast<float>(duration.count()) / 1e3);
     return 0;
 }

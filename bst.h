@@ -4,6 +4,11 @@
 #include <stdio.h>
 #include <mutex>
 #include <atomic>
+#include <cstring>
+#include <vector>
+#include <memory>
+#include <unordered_set>
+#include <condition_variable>
 
 template<typename T>
 class BST {
@@ -13,6 +18,7 @@ public:
     virtual bool find(const T& t)=0;
     virtual size_t size()=0;
     virtual void clear()=0;
+    virtual void register_thread(size_t tid)=0;
 };
 
 template<typename T>
@@ -46,6 +52,7 @@ public:
     virtual bool find(const T& t);
     virtual size_t size();
     virtual void clear();
+    virtual void register_thread(size_t tid) {};
 };
 
 template<typename T>
@@ -59,6 +66,7 @@ CoarseGrainedBST<T>::~CoarseGrainedBST() {
 template<typename T>
 void CoarseGrainedBST<T>::clear() {
     clear(root);
+    root = nullptr;
 }
 
 template<typename T>
@@ -69,7 +77,6 @@ void CoarseGrainedBST<T>::clear(node_t* node) {
     clear(node->left);
     clear(node->right);
     delete node;
-    root = nullptr;
 }
 
 template<typename T>
@@ -220,28 +227,57 @@ size_t CoarseGrainedBST<T>::size() {
     return _size;
 }
 
+#define N 100
+#define R 100
+
 template<typename T>
 class FineGrainedBST : public BST<T> {
+    enum Dir {
+        Left=0, Right=1
+    };
+    enum Color {
+        White, Blue
+    };
     struct node_t {
-        node_t* left;
-        node_t* right;
+        node_t* children[2];
+        node_t* back;
         std::mutex mtx;
         T val;
+        Color color;
         node_t() {
-            left = nullptr;
-            right = nullptr;
+            init();
         }
 
         node_t(const T& _val) {
-            left = nullptr;
-            right = nullptr;
+            init();
             val = _val;
         }
+
+        void init() {
+            children[Dir::Left] = nullptr;
+            children[Dir::Right] = nullptr;
+            back = nullptr;
+            memset(&val, 0xff, sizeof(T));
+            color = Color::White;
+        }
     };
+    static thread_local size_t thread_id;
+    std::vector<std::vector<node_t*>> rlist;
+    
+    std::atomic<int> rw_count;
+    std::mutex mtx;
+
     node_t* root;
     std::atomic<size_t> _size;
-    std::pair<node_t*, char> find_helper(node_t* node, const T& element) const;
+    std::pair<node_t*, Dir> find_helper(node_t* node, const T& element);
+    std::vector<node_t*> rotation(node_t* a, Dir dir1, Dir dir2);
     void clear(node_t* node);
+    void remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, Dir dir2);
+    void deletion_by_rotation(node_t* f, Dir dir);
+    void append_hp(node_t* ptr);
+    void scan();
+    void retire(node_t* ptr);
+    void gc();
 public:
     FineGrainedBST();
     virtual ~FineGrainedBST();
@@ -254,19 +290,57 @@ public:
     virtual bool find(const T& t);
     virtual size_t size();
     virtual void clear();
+    virtual void register_thread(size_t tid);
 };
 
 template<typename T>
-FineGrainedBST<T>::FineGrainedBST(): root(new node_t()), _size(0) {}
+thread_local size_t FineGrainedBST<T>::thread_id;
+
+template<typename T>
+void FineGrainedBST<T>::register_thread(size_t tid) {
+    thread_id = tid;
+}
+
+template<typename T>
+void FineGrainedBST<T>::retire(node_t* ptr) {
+    rlist[thread_id].push_back(ptr);
+}
+
+template<typename T>
+void FineGrainedBST<T>::gc() {
+    if (rlist[thread_id].size() > R) {
+        mtx.lock();
+        while (rw_count > 0);
+        for (node_t* node : rlist[thread_id]) {
+            delete node;
+        }
+        rlist[thread_id].clear();
+        mtx.unlock();
+    }
+}
+
+template<typename T>
+FineGrainedBST<T>::FineGrainedBST(): 
+    rlist(N),
+    rw_count(0),
+    root(new node_t()), _size(0) {}
 
 template<typename T>
 FineGrainedBST<T>::~FineGrainedBST() {
     clear();
+    delete root;
 }
 
 template<typename T>
 void FineGrainedBST<T>::clear() {
     clear(root);
+    root = new node_t();
+    for (int thread_id = 0; thread_id < N; thread_id++) {
+        for (node_t* node : rlist[thread_id]) {
+            delete node;
+        }
+        rlist[thread_id].clear();
+    }
 }
 
 template<typename T>
@@ -274,79 +348,174 @@ void FineGrainedBST<T>::clear(node_t* node) {
     if (node == nullptr) {
         return;
     }
-    clear(node->left);
-    clear(node->right);
+    clear(node->children[Dir::Left]);
+    clear(node->children[Dir::Right]);
     delete node;
-    root = new node_t();
 }
 
 template<typename T>
 bool FineGrainedBST<T>::insert(const T& t) {
-    std::pair<node_t*, char> fdir = find_helper(root, t);
-    node_t* dir;
-    if (fdir.second == 'L') {
-        dir = fdir.first->left;
-    } else {
-        dir = fdir.first->right;
-    }
+    mtx.lock();
+    mtx.unlock();
+
+    rw_count++;
+
+    std::pair<node_t*, Dir> fdir = find_helper(root, t);
+    node_t* parent = fdir.first;
+    Dir dir = fdir.second;
+    node_t* child = parent->children[dir];
     bool inserted = false;
-    if (dir == nullptr) {
-        if (fdir.second == 'L') {
-            fdir.first->left = new node_t(t);
-        } else {
-            fdir.first->right = new node_t(t);
-        }
+    if (child == nullptr) {
+        parent->children[dir] = new node_t(t);
         _size++;
         inserted = true;
     }
-    fdir.first->mtx.unlock();
+    parent->mtx.unlock();
+
+    rw_count--;
+
     return inserted;
 }
 
 template<typename T>
-std::pair<typename FineGrainedBST<T>::node_t*, char> FineGrainedBST<T>::find_helper(node_t* node, const T& element) const {
-    node_t* dir;
-    char dir_symbol;
+std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> FineGrainedBST<T>::find_helper(node_t* node, const T& element) {
+    Dir dir;
     if (element < node->val) {
-        dir = node->left;
-        dir_symbol = 'L';
+        dir = Dir::Left;
     } else {
-        dir = node->right;
-        dir_symbol = 'R';
+        dir = Dir::Right;
     }
-    if (dir != nullptr && dir->val != element) {
-        return find_helper(dir, element);
+    node_t* child = node->children[dir];
+    if (child != nullptr && child->val != element) {
+        return find_helper(child, element);
     }
     node->mtx.lock();
-    bool changed = false;
-    if (dir_symbol == 'L') {
-        changed = node->left != dir;
-    } else {
-        changed = node->right != dir;
-    }
-    if (changed) {
+    if (node->color == Color::Blue) {
+        node->mtx.unlock();
+        return find_helper(node->back, element);
+    } else if (node->children[dir] != child) {
         node->mtx.unlock();
         return find_helper(node, element);
     }
-    return std::pair<node_t*, char>(node, dir_symbol);
+    return std::pair<node_t*, Dir>(node, dir);
 }
 
 template<typename T>
 void FineGrainedBST<T>::erase(const T& t) {
+    mtx.lock();
+    mtx.unlock();
+
+    rw_count++;
+
+    std::pair<node_t*, Dir> fdir = find_helper(root, t);
+
+    node_t* parent = fdir.first;
+    Dir dir = fdir.second;
+    node_t* child = parent->children[dir];
+    if (child == nullptr) {
+        parent->mtx.unlock();
+    } else {
+        child->mtx.lock();
+        deletion_by_rotation(parent, dir);
+        _size--;
+    }
+
+    rw_count--;
+
+    gc();
+}
+
+template<typename T>
+void FineGrainedBST<T>::deletion_by_rotation(typename FineGrainedBST<T>::node_t* f, Dir dir) {
+    node_t* s = f->children[dir];
+    if (s->children[Dir::Left] == nullptr) {
+        remove(f, dir, Dir::Right);
+    } else {
+        std::vector<node_t*> fgh = rotation(f, dir, Dir::Left);
+        f = fgh[0];
+        node_t* g = fgh[1];
+        node_t* h = fgh[2];
+        if (h->children[Dir::Left] == nullptr) {
+            deletion_by_rotation(g, Dir::Right);
+        } else {
+            deletion_by_rotation(g, Dir::Right);
+            f->mtx.lock();
+            if (g != f->children[dir] || f->color == Color::Blue) {
+                f->mtx.unlock();
+            } else {
+                g->mtx.lock();
+                std::vector<node_t*> fgh_new = rotation(f, dir, Dir::Right);
+                f = fgh_new[0];
+                node_t* g_new = fgh_new[1];
+                node_t* h_new = fgh_new[2];
+                g_new->mtx.unlock();
+                h_new->mtx.unlock();
+            }
+        }
+    }
+}
+
+template<typename T>
+void FineGrainedBST<T>::remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, Dir dir2) {
+    node_t* b = a->children[dir1];
+    node_t* c = b->children[dir2];
+    a->children[dir1] = c;
+    b->children[dir2] = c;
+    b->back = a;
+    b->color = Color::Blue;
+    a->mtx.unlock();
+    b->mtx.unlock();
+    retire(b);
+}
+
+template<typename T>
+std::vector<typename FineGrainedBST<T>::node_t*> FineGrainedBST<T>::rotation(node_t* a, Dir dir1, Dir dir2) {
+    node_t* b = a->children[dir1];
+    node_t* c = b->children[dir2];
+    node_t* b_new = new node_t();
+    node_t* c_new = new node_t();
     
+    b_new->mtx.lock();
+    c_new->mtx.lock();
+    c->mtx.lock();
+    
+    c_new->children[dir2] = c->children[dir2];
+    c_new->children[dir2 ^ 1] = b_new;
+    c_new->val = c->val;
+    b_new->children[dir2] = c->children[dir2 ^ 1];
+    b_new->children[dir2 ^ 1] = b->children[dir2 ^ 1];
+    b_new->val = b->val;
+    a->children[dir1] = c_new;
+    
+    b->back = a;
+    b->color = Color::Blue;
+    c->back = c_new;
+    c->color = Color::Blue;
+    a->mtx.unlock();
+    b->mtx.unlock();
+    c->mtx.unlock();
+
+    retire(b);
+    retire(c);
+    return { a, c_new, b_new };
 }
 
 template<typename T>
 bool FineGrainedBST<T>::find(const T& t) {
-    std::pair<node_t*, char> fdir = find_helper(root, t);
-    node_t* dir;
-    if (fdir.second == 'L') {
-        dir = fdir.first->left;
-    } else {
-        dir = fdir.first->right;
-    }
-    bool found = dir != nullptr;
-    fdir.first->mtx.unlock();
+    mtx.lock();
+    mtx.unlock();
+
+    rw_count++;
+
+    std::pair<node_t*, Dir> fdir = find_helper(root, t);
+    node_t* parent = fdir.first;
+    Dir dir = fdir.second;
+    node_t* child = parent->children[dir];
+    bool found = child != nullptr;
+    parent->mtx.unlock();
+
+    rw_count--;
+
     return found;
 }
 
@@ -363,6 +532,7 @@ public:
     virtual bool find(const T& t)=0;
     virtual size_t size()=0;
     virtual void clear()=0;
+    virtual void register_thread(size_t tid) {}
 };
 
 template<typename T>
