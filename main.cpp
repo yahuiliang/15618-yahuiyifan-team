@@ -9,7 +9,7 @@
 #include <getopt.h>
 #include <numeric>
 
-#define TEST_SIZE 500000
+#define TEST_SIZE 600000
 #define RAND_RANGE 1000
 #define THREAD_NUM 100
 // #define INPUT_PRINT
@@ -17,18 +17,18 @@
 #define TEST_PARALLEL
 #define TEST_ERASE
 
-enum State {
-    Correctness_Test=0, Load_Test=1
+enum class State {
+    Correctness_Test=0, Load_Test=1, Unknown=2
 };
 
-enum Pattern {
-    Insert, Erase, Find, Mixture, One_Branch
+enum class Pattern {
+    Insert, Erase, Find, Mixture, One_Branch, Unknown
 };
 
-static State state = State::Correctness_Test;
-static Pattern pattern = Pattern::Insert;
+static State state = State::Unknown;
+static Pattern pattern = Pattern::Unknown;
 
-static CoarseGrainedBST<int> bst;
+static FineGrainedBST<int> bst;
 static std::mutex mtx;
 
 void test_single_thread() {
@@ -123,13 +123,18 @@ void correctness_test() {
     printf("test finished in %f\n", static_cast<float>(duration.count()) / 1e3);
 }
 
+typedef std::chrono::milliseconds time_std;
+
 void load_test() {
     bst.clear();
     std::vector<std::thread> threads(THREAD_NUM);
     std::vector<size_t> exec_times(THREAD_NUM);
     std::vector<int> data(static_cast<size_t>(TEST_SIZE));
+    for (size_t i = 0; i < data.size(); i++) {
+        data[i] = i;
+    }
     switch (pattern) {
-        case Insert:
+        case Pattern::Insert:
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id] = std::thread([&exec_times](size_t thread_id) {
                     auto start_time = std::chrono::high_resolution_clock::now();
@@ -141,14 +146,11 @@ void load_test() {
                         bst.insert(data);
                     }
                     auto end_time = std::chrono::high_resolution_clock::now();
-                    exec_times[thread_id] = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+                    exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
                 }, thread_id);
             }
             break;
-        case Erase:
-            for (size_t i = 0; i < data.size(); i++) {
-                data[i] = i;
-            }
+        case Pattern::Erase:
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id] = std::thread([&data](size_t thread_id) {
                     bst.register_thread(thread_id);
@@ -174,14 +176,11 @@ void load_test() {
                         bst.erase(data[i]);
                     }
                     auto end_time = std::chrono::high_resolution_clock::now();
-                    exec_times[thread_id] = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+                    exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
                 }, thread_id);
             }
             break;
-        case Find:
-        for (size_t i = 0; i < data.size(); i++) {
-                data[i] = i;
-            }
+        case Pattern::Find:
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id] = std::thread([&data](size_t thread_id) {
                     bst.register_thread(thread_id);
@@ -207,14 +206,11 @@ void load_test() {
                         bst.find(data[i]);
                     }
                     auto end_time = std::chrono::high_resolution_clock::now();
-                    exec_times[thread_id] = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+                    exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
                 }, thread_id);
             }
             break;
-        case Mixture:
-            for (size_t i = 0; i < data.size(); i++) {
-                data[i] = i;;
-            }
+        case Pattern::Mixture:
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id] = std::thread([&exec_times, &data](size_t thread_id) {
                     auto start_time = std::chrono::high_resolution_clock::now();
@@ -230,7 +226,7 @@ void load_test() {
                         size_t local_test_size = (TEST_SIZE + insert_thread_num - 1) / insert_thread_num;
                         size_t insert_base_id = 0;
                         size_t start = (thread_id - insert_base_id) * local_test_size;
-                        size_t end = std::min(insert_id_max, start + local_test_size);
+                        size_t end = std::min(static_cast<size_t>(TEST_SIZE), start + local_test_size);
                         for (size_t i = start; i < end; i++) {
                             bst.insert(data[i]);
                         }
@@ -239,7 +235,7 @@ void load_test() {
                         size_t local_test_size = (TEST_SIZE + erase_thread_num - 1) / erase_thread_num;
                         size_t erase_base_id = insert_id_max;
                         size_t start = (thread_id - erase_base_id) * local_test_size;
-                        size_t end = std::min(erase_id_max, start + local_test_size);
+                        size_t end = std::min(static_cast<size_t>(TEST_SIZE), start + local_test_size);
                         for (size_t i = start; i < end; i++) {
                             bst.erase(data[i]);
                         }
@@ -248,18 +244,35 @@ void load_test() {
                         size_t local_test_size = (TEST_SIZE + find_thread_num - 1) / find_thread_num;
                         size_t find_base_id = erase_id_max;
                         size_t start = (thread_id - find_base_id) * local_test_size;
-                        size_t end = std::min(find_id_max, start + local_test_size);
+                        size_t end = std::min(static_cast<size_t>(TEST_SIZE), start + local_test_size);
                         for (size_t i = start; i < end; i++) {
                             bst.find(data[i]);
                         }
                     }
                     auto end_time = std::chrono::high_resolution_clock::now();
-                    exec_times[thread_id] = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+                    exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
                 }, thread_id);
             }
             break;
-        case One_Branch:
-            break;
+        // Some issues exist in the code below...
+        // case Pattern::One_Branch:
+        //     for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
+        //         threads[thread_id] = std::thread([&exec_times, &data](size_t thread_id) {
+        //             auto start_time = std::chrono::high_resolution_clock::now();
+        //             bst.register_thread(thread_id);
+        //             for (size_t i = thread_id; i < TEST_SIZE; i+=THREAD_NUM) {
+        //                 bst.insert(data[i]);
+        //             }
+        //             auto end_time = std::chrono::high_resolution_clock::now();
+        //             exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
+        //         }, thread_id);
+        //     }
+        //     break;
+        default:
+            printf("Unknown pattern\n");
+            printf("Available patterns:\n");
+            printf("0=Insert, 1=Erase, 2=Find, 3=Mixture, 4=One_Branch\n");
+            return;
     }
     for (size_t thread_id = 0; thread_id < threads.size(); thread_id++) {
         threads[thread_id].join();
@@ -281,7 +294,9 @@ int main(int argc, char **argv) {
                 tmp = std::string(optarg);
                 for (char c : tmp) {
                     if (!isdigit(c)) {
-                        printf("available: 0 1 2 3 4\n");
+                        printf("Unknown pattern\n");
+                        printf("Available patterns:\n");
+                        printf("0=Insert, 1=Erase, 2=Find, 3=Mixture, 4=One_Branch\n");
                         return 0;
                     }
                 }
@@ -296,11 +311,16 @@ int main(int argc, char **argv) {
         }
     }
     switch (state) {
-        case Correctness_Test:
+        case State::Correctness_Test:
             correctness_test();
             break;
-        case Load_Test:
+        case State::Load_Test:
             load_test();
+            break;
+        default:
+            printf("Unknown state\n");
+            printf("Available states:\n");
+            printf("0=Correctness_Test, 1=Load_Test\n"); 
             break;
     }
     
