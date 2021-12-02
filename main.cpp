@@ -11,9 +11,9 @@
 #define RAND_RANGE 1000
 #define THREAD_NUM 100
 // #define INPUT_PRINT
-// #define TEST_CORRECTNESS
+#define TEST_CORRECTNESS
 #define TEST_PARALLEL
-// #define TEST_ERASE
+#define TEST_ERASE
 
 static LockFreeBST<int> bst;
 static std::mutex mtx;
