@@ -929,6 +929,12 @@ size_t LockFreeBST<T>::size() {
 template<typename T>
 void LockFreeBST<T>::clear() {
     clear(R_root.load());
+    for (int thread_id = 0; thread_id < N; thread_id++) {
+        for (node_t* node : rlist[thread_id]) {
+            delete node;
+        }
+        rlist[thread_id].clear();
+    }
 }
 
 template<typename T>
@@ -943,12 +949,6 @@ void LockFreeBST<T>::clear(size_t node_addr) {
     clear(right);
     delete node;
     // root = nullptr;
-    for (int thread_id = 0; thread_id < N; thread_id++) {
-        for (node_t* node : rlist[thread_id]) {
-            delete node;
-        }
-        rlist[thread_id].clear();
-    }
 }
 
 #endif
