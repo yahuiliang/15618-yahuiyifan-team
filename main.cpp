@@ -8,10 +8,8 @@
 #include <chrono>
 #include <getopt.h>
 #include <numeric>
-
-#define TEST_SIZE 600000
+ 
 #define RAND_RANGE 1000
-#define THREAD_NUM 100
 // #define INPUT_PRINT
 #define TEST_CORRECTNESS
 #define TEST_PARALLEL
@@ -30,6 +28,8 @@ static Pattern pattern = Pattern::Unknown;
 
 static FineGrainedBST<int> bst;
 static std::mutex mtx;
+static size_t TEST_SIZE = 10000;
+static size_t THREAD_NUM = 2;
 
 void test_single_thread() {
     bst.clear();
@@ -74,9 +74,9 @@ void test_multi_thread() {
             bst.register_thread(thread_id);
             size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
             std::vector<int> elements(local_test_size, 0);
-            int start = thread_id * local_test_size;
-            int end = std::min(TEST_SIZE, static_cast<int>((thread_id + 1) * local_test_size));
-            for (int i = start; i < end; i++) {
+            size_t start = thread_id * local_test_size;
+            size_t end = std::min(TEST_SIZE, (thread_id + 1) * local_test_size);
+            for (size_t i = start; i < end; i++) {
                 elements[i - start] = i;
             }
             #ifdef INPUT_PRINT
@@ -104,7 +104,7 @@ void test_multi_thread() {
             #endif
         }, thread_id);
     }
-    for (int i = 0; i < THREAD_NUM; i++) {
+    for (size_t i = 0; i < THREAD_NUM; i++) {
         threads[i].join();
     }
     printf("test parallel passed\n");
@@ -129,7 +129,7 @@ void load_test() {
     bst.clear();
     std::vector<std::thread> threads(THREAD_NUM);
     std::vector<size_t> exec_times(THREAD_NUM);
-    std::vector<int> data(static_cast<size_t>(TEST_SIZE));
+    std::vector<int> data(TEST_SIZE);
     for (size_t i = 0; i < data.size(); i++) {
         data[i] = i;
     }
@@ -140,10 +140,10 @@ void load_test() {
                     auto start_time = std::chrono::high_resolution_clock::now();
                     bst.register_thread(thread_id);
                     size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
-                    int start = thread_id * local_test_size;
-                    int end = std::min(TEST_SIZE, static_cast<int>((thread_id + 1) * local_test_size));
-                    for (int data = start; data < end; data++) {
-                        bst.insert(data);
+                    size_t start = thread_id * local_test_size;
+                    size_t end = std::min(TEST_SIZE, (thread_id + 1) * local_test_size);
+                    for (size_t data = start; data < end; data++) {
+                        bst.insert(static_cast<int>(data));
                     }
                     auto end_time = std::chrono::high_resolution_clock::now();
                     exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
@@ -156,7 +156,7 @@ void load_test() {
                     bst.register_thread(thread_id);
                     size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
                     size_t start = thread_id * local_test_size;
-                    size_t end = std::min(TEST_SIZE, static_cast<int>((thread_id + 1) * local_test_size));
+                    size_t end = std::min(TEST_SIZE, (thread_id + 1) * local_test_size);
                     for (size_t i = start; i < end; i++) {
                         bst.insert(data[i]);
                     }
@@ -170,9 +170,9 @@ void load_test() {
                     auto start_time = std::chrono::high_resolution_clock::now();
                     bst.register_thread(thread_id);
                     size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
-                    int start = thread_id * local_test_size;
-                    int end = std::min(TEST_SIZE, static_cast<int>((thread_id + 1) * local_test_size));
-                    for (int i = start; i < end; i++) {
+                    size_t start = thread_id * local_test_size;
+                    size_t end = std::min(TEST_SIZE, (thread_id + 1) * local_test_size);
+                    for (size_t i = start; i < end; i++) {
                         bst.erase(data[i]);
                     }
                     auto end_time = std::chrono::high_resolution_clock::now();
@@ -186,7 +186,7 @@ void load_test() {
                     bst.register_thread(thread_id);
                     size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
                     size_t start = thread_id * local_test_size;
-                    size_t end = std::min(TEST_SIZE, static_cast<int>((thread_id + 1) * local_test_size));
+                    size_t end = std::min(TEST_SIZE, (thread_id + 1) * local_test_size);
                     for (size_t i = start; i < end; i++) {
                         bst.insert(data[i]);
                     }
@@ -200,9 +200,9 @@ void load_test() {
                     auto start_time = std::chrono::high_resolution_clock::now();
                     bst.register_thread(thread_id);
                     size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
-                    int start = thread_id * local_test_size;
-                    int end = std::min(TEST_SIZE, static_cast<int>((thread_id + 1) * local_test_size));
-                    for (int i = start; i < end; i++) {
+                    size_t start = thread_id * local_test_size;
+                    size_t end = std::min(TEST_SIZE, (thread_id + 1) * local_test_size);
+                    for (size_t i = start; i < end; i++) {
                         bst.find(data[i]);
                     }
                     auto end_time = std::chrono::high_resolution_clock::now();
@@ -281,11 +281,15 @@ void load_test() {
     printf("load test %fs\n", static_cast<float>(avg) / static_cast<float>(1e3));
 }
 
+void print_test_status() {
+    printf("testing with n=%lu d=%lu\n", THREAD_NUM, TEST_SIZE);
+}
+
 int main(int argc, char **argv) {
     srand(time(NULL));
     int opt;
     std::string tmp;
-    while ((opt = getopt(argc, argv, "p:th")) != -1) {
+    while ((opt = getopt(argc, argv, "p:thn:d:")) != -1) {
         switch (opt) {
             case 't':
                 state = State::Correctness_Test;
@@ -303,24 +307,50 @@ int main(int argc, char **argv) {
                 state = State::Load_Test;
                 pattern = static_cast<Pattern>(std::stoi(tmp));
                 break;
-            case 'h':
+            case 'n':
+                // thread number
+                tmp = std::string(optarg);
+                for (char c : tmp) {
+                    if (!isdigit(c)) {
+                        printf("thread number should be a number\n");
+                        return 0;
+                    } 
+                }
+                THREAD_NUM = stoi(tmp);
+                break;
+            case 'd':
+                // test data size
+                tmp = std::string(optarg);
+                for (char c : tmp) {
+                    if (!isdigit(c)) {
+                        printf("test data size should be a number\n");
+                        return 0;
+                    }
+                }
+                TEST_SIZE = stoi(tmp);
+                break;
+            default:
                 printf("-t: run correctness tests\n");
-                printf("-p: run pattern generator\n");
+                printf("-p: run pattern generator, available parameters: 0=Insert, 1=Erase, 2=Find, 3=Mixture, 4=One_Branch\n");
+                printf("-n: thread num\n");
+                printf("-d: data size\n");
                 printf("-h help\n");
                 return 0;
         }
     }
     switch (state) {
         case State::Correctness_Test:
+            print_test_status(); 
             correctness_test();
             break;
         case State::Load_Test:
+            print_test_status();
             load_test();
             break;
         default:
             printf("Unknown state\n");
-            printf("Available states:\n");
-            printf("0=Correctness_Test, 1=Load_Test\n"); 
+            printf("-t Correctness_Test\n");
+            printf("-p Load_Test\n");
             break;
     }
     
