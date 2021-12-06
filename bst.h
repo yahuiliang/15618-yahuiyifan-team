@@ -640,7 +640,7 @@ LockFreeBST<T>::LockFreeBST(): rlist(N), rw_count(0) {
 
 template<typename T>
 LockFreeBST<T>::~LockFreeBST() {
-    clear();
+    //clear();
 }
 
 template<typename T>
@@ -790,7 +790,7 @@ void LockFreeBST<T>::erase(const T& key) {
     }
 
     rw_count--;
-    gc();
+    //gc();
 }
 
 template<typename T>
@@ -885,14 +885,11 @@ bool LockFreeBST<T>::cleanup(const T& key, const seekRecord_t* seekRecord) {
     bool result = std::atomic_compare_exchange_weak(
         successorAddrPtr, 
         &successorExpect,
-        successorNew
+        successorNew & ~tag_mask
     );
 
     retire(parent_n);
     retire(leaf_n);
-
-    // Clear tag
-    *successorAddrPtr = *successorAddrPtr & ~tag_mask;
     
     return result;
 }
