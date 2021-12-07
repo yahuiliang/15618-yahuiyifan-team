@@ -640,7 +640,7 @@ LockFreeBST<T>::LockFreeBST(): rlist(N), rw_count(0) {
 
 template<typename T>
 LockFreeBST<T>::~LockFreeBST() {
-    //clear();
+    clear();
 }
 
 template<typename T>
@@ -790,7 +790,7 @@ void LockFreeBST<T>::erase(const T& key) {
     }
 
     rw_count--;
-    //gc();
+    gc();
 }
 
 template<typename T>
@@ -887,9 +887,11 @@ bool LockFreeBST<T>::cleanup(const T& key, const seekRecord_t* seekRecord) {
         &successorExpect,
         successorNew & ~tag_mask
     );
-
-    retire(parent_n);
-    retire(leaf_n);
+    
+    if (result) {
+        retire(parent_n);
+        retire(leaf_n);
+    }
     
     return result;
 }
