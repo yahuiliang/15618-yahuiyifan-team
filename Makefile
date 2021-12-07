@@ -1,5 +1,5 @@
 CXX := g++ -m64 -std=c++11
-CXXFLAGS := -g -Wall -lpthread
+CXXFLAGS := -O3 -Wall -lpthread
 APP_NAME := main
 OBJS := $(patsubst %.cpp,%.o,$(wildcard *.cpp))
 

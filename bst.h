@@ -825,7 +825,7 @@ void LockFreeBST<T>::erase(const T& key) {
     }
 
     rw_count--;
-    gc();
+    // gc();
 }
 
 template<typename T>
