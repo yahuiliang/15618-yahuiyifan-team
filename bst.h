@@ -593,6 +593,7 @@ class LockFreeBST : public BST<T> {
     bool find_helper(const T& key);
     void gc();
     void retire(node_t* ptr);
+    void init();
 public:
     LockFreeBST();
     virtual ~LockFreeBST();
@@ -638,8 +639,10 @@ void LockFreeBST<T>::gc() {
 }
 
 template<typename T>
-LockFreeBST<T>::LockFreeBST(): rw_count(0) {
+void LockFreeBST<T>::init() {
+    rw_count = 0;
     _size = 0;
+
     node_t *R_root_n = new node_t(INFINITY_2);
     node_t *S_root_n = new node_t(INFINITY_1);
 
@@ -656,8 +659,23 @@ LockFreeBST<T>::LockFreeBST(): rw_count(0) {
 }
 
 template<typename T>
+LockFreeBST<T>::LockFreeBST() {
+    init();
+}
+
+template<typename T>
 LockFreeBST<T>::~LockFreeBST() {
     clear();
+    node_t* R_root_n = get_addr(R_root);
+    node_t* S_root_n = get_addr(R_root_n->left);
+    node_t* sentinel_node_0 = get_addr(S_root_n->left);
+    node_t* sentinel_node_1 = get_addr(S_root_n->right);
+    node_t* sentinel_node_2 = get_addr(R_root_n->right);
+    delete R_root_n;
+    delete S_root_n;
+    delete sentinel_node_0;
+    delete sentinel_node_1;
+    delete sentinel_node_2;
 }
 
 template<typename T>
@@ -951,6 +969,7 @@ void LockFreeBST<T>::clear() {
         }
         rlist[thread_id].clear();
     }
+    init();
 }
 
 template<typename T>
@@ -964,7 +983,6 @@ void LockFreeBST<T>::clear(size_t node_addr) {
     clear(left);
     clear(right);
     delete node;
-    // root = nullptr;
 }
 
 #endif
