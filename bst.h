@@ -12,14 +12,21 @@
 
 template<typename T>
 class BST {
+protected:
+    size_t N;
+    static const size_t R;
 public:
     virtual bool insert(const T& t)=0;
     virtual void erase(const T& t)=0;
     virtual bool find(const T& t)=0;
     virtual size_t size()=0;
     virtual void clear()=0;
+    virtual void set_N(size_t _N) { N = _N; }
     virtual void register_thread(size_t tid)=0;
 };
+
+template<typename T>
+const size_t BST<T>::R = 100;
 
 template<typename T>
 class CoarseGrainedBST : public BST<T> {
@@ -227,9 +234,6 @@ size_t CoarseGrainedBST<T>::size() {
     return _size;
 }
 
-#define N 100
-#define R 100
-
 template<typename T>
 class FineGrainedBST : public BST<T> {
     enum Dir {
@@ -290,11 +294,18 @@ public:
     virtual bool find(const T& t);
     virtual size_t size();
     virtual void clear();
+    virtual void set_N(size_t _N);
     virtual void register_thread(size_t tid);
 };
 
 template<typename T>
 thread_local size_t FineGrainedBST<T>::thread_id;
+
+template<typename T>
+void FineGrainedBST<T>::set_N(size_t _N) {
+    BST<T>::set_N(_N);
+    rlist.resize(_N);
+}
 
 template<typename T>
 void FineGrainedBST<T>::register_thread(size_t tid) {
@@ -308,7 +319,7 @@ void FineGrainedBST<T>::retire(node_t* ptr) {
 
 template<typename T>
 void FineGrainedBST<T>::gc() {
-    if (rlist[thread_id].size() > R) {
+    if (rlist[thread_id].size() > BST<T>::R) {
         mtx.lock();
         while (rw_count > 0);
         for (node_t* node : rlist[thread_id]) {
@@ -321,7 +332,6 @@ void FineGrainedBST<T>::gc() {
 
 template<typename T>
 FineGrainedBST<T>::FineGrainedBST(): 
-    rlist(N),
     rw_count(0),
     root(new node_t()), _size(0) {}
 
@@ -335,7 +345,7 @@ template<typename T>
 void FineGrainedBST<T>::clear() {
     clear(root);
     root = new node_t();
-    for (int thread_id = 0; thread_id < N; thread_id++) {
+    for (size_t thread_id = 0; thread_id < BST<T>::N; thread_id++) {
         for (node_t* node : rlist[thread_id]) {
             delete node;
         }

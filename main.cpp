@@ -11,7 +11,7 @@
  
 #define RAND_RANGE 1000
 // #define INPUT_PRINT
-#define TEST_CORRECTNESS
+//#define TEST_CORRECTNESS
 #define TEST_PARALLEL
 #define TEST_ERASE
 
@@ -33,6 +33,7 @@ static size_t THREAD_NUM = 2;
 
 void test_single_thread() {
     bst.clear();
+    bst.set_N(1);
     bst.register_thread(0);
     std::vector<int> elements(TEST_SIZE);
     size_t n = elements.size();
@@ -68,6 +69,7 @@ void test_single_thread() {
 
 void test_multi_thread() {
     bst.clear();
+    bst.set_N(THREAD_NUM);
     std::vector<std::thread> threads(THREAD_NUM);
     for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
         threads[thread_id] = std::thread([](size_t thread_id) {
@@ -127,6 +129,7 @@ typedef std::chrono::milliseconds time_std;
 
 void load_test() {
     bst.clear();
+    bst.set_N(THREAD_NUM);
     std::vector<std::thread> threads(THREAD_NUM);
     std::vector<size_t> exec_times(THREAD_NUM);
     std::vector<int> data(TEST_SIZE);
