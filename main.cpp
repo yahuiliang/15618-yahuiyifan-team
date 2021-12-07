@@ -26,7 +26,7 @@ enum class Pattern {
 static State state = State::Unknown;
 static Pattern pattern = Pattern::Unknown;
 
-static FineGrainedBST<int> bst;
+static LockFreeBST<int> bst;
 static std::mutex mtx;
 static size_t TEST_SIZE = 10000;
 static size_t THREAD_NUM = 2;
@@ -359,4 +359,3 @@ int main(int argc, char **argv) {
     
     return 0;
 }
-
