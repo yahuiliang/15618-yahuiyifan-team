@@ -131,16 +131,16 @@ void load_test() {
     bst.clear();
     bst.set_N(THREAD_NUM);
     std::vector<std::thread> threads(THREAD_NUM);
-    std::vector<size_t> exec_times(THREAD_NUM);
     std::vector<int> data(TEST_SIZE);
     for (size_t i = 0; i < data.size(); i++) {
         data[i] = i;
     }
+    std::chrono::high_resolution_clock::time_point start_time;
     switch (pattern) {
         case Pattern::Insert:
+            start_time = std::chrono::high_resolution_clock::now();
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
-                threads[thread_id] = std::thread([&exec_times](size_t thread_id) {
-                    auto start_time = std::chrono::high_resolution_clock::now();
+                threads[thread_id] = std::thread([](size_t thread_id) {
                     bst.register_thread(thread_id);
                     size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
                     size_t start = thread_id * local_test_size;
@@ -148,8 +148,6 @@ void load_test() {
                     for (size_t data = start; data < end; data++) {
                         bst.insert(static_cast<int>(data));
                     }
-                    auto end_time = std::chrono::high_resolution_clock::now();
-                    exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
                 }, thread_id);
             }
             break;
@@ -168,9 +166,9 @@ void load_test() {
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id].join();
             }
+            start_time = std::chrono::high_resolution_clock::now();
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
-                threads[thread_id] = std::thread([&exec_times, &data](size_t thread_id) {
-                    auto start_time = std::chrono::high_resolution_clock::now();
+                threads[thread_id] = std::thread([&data](size_t thread_id) {
                     bst.register_thread(thread_id);
                     size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
                     size_t start = thread_id * local_test_size;
@@ -178,8 +176,6 @@ void load_test() {
                     for (size_t i = start; i < end; i++) {
                         bst.erase(data[i]);
                     }
-                    auto end_time = std::chrono::high_resolution_clock::now();
-                    exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
                 }, thread_id);
             }
             break;
@@ -198,9 +194,9 @@ void load_test() {
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id].join();
             }
+            start_time = std::chrono::high_resolution_clock::now();
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
-                threads[thread_id] = std::thread([&exec_times, &data](size_t thread_id) {
-                    auto start_time = std::chrono::high_resolution_clock::now();
+                threads[thread_id] = std::thread([&data](size_t thread_id) {
                     bst.register_thread(thread_id);
                     size_t local_test_size = (TEST_SIZE + THREAD_NUM - 1) / THREAD_NUM;
                     size_t start = thread_id * local_test_size;
@@ -208,16 +204,13 @@ void load_test() {
                     for (size_t i = start; i < end; i++) {
                         bst.find(data[i]);
                     }
-                    auto end_time = std::chrono::high_resolution_clock::now();
-                    exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
                 }, thread_id);
             }
             break;
         case Pattern::Mixture:
+            start_time = std::chrono::high_resolution_clock::now();
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
-                threads[thread_id] = std::thread([&exec_times, &data](size_t thread_id) {
-                    auto start_time = std::chrono::high_resolution_clock::now();
-                    
+                threads[thread_id] = std::thread([&data](size_t thread_id) {
                     bst.register_thread(thread_id);
                     
                     size_t thread_num = THREAD_NUM / 3.f;
@@ -252,8 +245,6 @@ void load_test() {
                             bst.find(data[i]);
                         }
                     }
-                    auto end_time = std::chrono::high_resolution_clock::now();
-                    exec_times[thread_id] = std::chrono::duration_cast<time_std>(end_time - start_time).count();
                 }, thread_id);
             }
             break;
@@ -280,8 +271,9 @@ void load_test() {
     for (size_t thread_id = 0; thread_id < threads.size(); thread_id++) {
         threads[thread_id].join();
     }
-    size_t avg = std::accumulate(exec_times.begin(), exec_times.end(), 0ul) / THREAD_NUM;
-    printf("load test %fs\n", static_cast<float>(avg) / static_cast<float>(1e3));
+    std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
+    auto time_count = std::chrono::duration_cast<time_std>(end_time - start_time).count();
+    printf("load test %fs\n", static_cast<float>(time_count) / static_cast<float>(1e3));
 }
 
 void print_test_status() {
