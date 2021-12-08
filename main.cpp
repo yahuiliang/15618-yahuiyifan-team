@@ -26,7 +26,7 @@ enum class Pattern {
 static State state = State::Unknown;
 static Pattern pattern = Pattern::Unknown;
 
-static LockFreeBST<int> bst;
+static FineGrainedBST<int> bst;
 static std::mutex mtx;
 static size_t TEST_SIZE = 10000;
 static size_t THREAD_NUM = 2;
@@ -125,7 +125,7 @@ void correctness_test() {
     printf("test finished in %f\n", static_cast<float>(duration.count()) / 1e3);
 }
 
-typedef std::chrono::milliseconds time_std;
+typedef std::chrono::microseconds time_std;
 
 void load_test() {
     // bst.clear();
@@ -370,7 +370,10 @@ void load_test() {
         threads[thread_id].join();
     }
     size_t avg = std::accumulate(exec_times.begin(), exec_times.end(), 0ul) / THREAD_NUM;
-    printf("load test %fs\n", static_cast<float>(avg) / static_cast<float>(1e3));
+    // printf("load test %fs\n", static_cast<float>(avg) / static_cast<float>(1e6));
+    // printf("load test %fms\n", static_cast<float>(avg));
+    printf("%f\n", static_cast<float>(avg) / static_cast<float>(1e6));
+
 }
 
 void print_test_status() {
