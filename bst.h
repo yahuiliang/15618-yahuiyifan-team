@@ -17,6 +17,7 @@ protected:
     size_t N;
     static const size_t R;
 public:
+    virtual ~BST() {}
     virtual bool insert(const T& t)=0;
     virtual void erase(const T& t)=0;
     virtual bool find(const T& t)=0;
