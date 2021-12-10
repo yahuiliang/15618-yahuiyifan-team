@@ -166,8 +166,10 @@ We timed each experiment, and plot bar plots of time to compare the performance 
 ![](./result_figs/t_1_p_Mixed.png)  |  ![](./result_figs/t_64_p_Mixed.png) |  ![](./result_figs/t_256_p_Mixed.png) |
 ![](./result_figs/t_1_p_Read_dominance.png)  |  ![](./result_figs/t_64_p_Read_dominance.png) |  ![](./result_figs/t_256_p_Read_dominance.png) |
 
+Experiments results for the contention simulated pattern.
+
 | Contention simulated when 64 threads | Contention simulated when 256 threads|
-:-------------------------:|:-------------------------: | :-------------------------: |
+:-------------------------:|:-------------------------: |
 ![](./result_figs/t_64_p_Contention.png) |  ![](./result_figs/t_256_p_Contention.png) |
 
 #### Conclusion and Analysis
