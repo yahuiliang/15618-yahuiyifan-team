@@ -431,6 +431,7 @@ void FineGrainedBST<T>::gc() {
     if (rlist[thread_id].size() > BST<T>::R) {
         mtx.lock();
         while (rw_count > 0);
+        // Traverse the retire list and clear nodes
         for (node_t* node : rlist[thread_id]) {
             delete node;
         }
@@ -454,6 +455,7 @@ template<typename T>
 void FineGrainedBST<T>::clear() {
     clear(root);
     root = new node_t();
+    // Traver the retire list and clear nodes
     for (size_t thread_id = 0; thread_id < BST<T>::N; thread_id++) {
         for (node_t* node : rlist[thread_id]) {
             delete node;
@@ -485,6 +487,7 @@ bool FineGrainedBST<T>::insert(const T& t) {
     node_t* child = parent->children[dir];
     bool inserted = false;
     if (child == nullptr) {
+        // Append new child to the parent
         parent->children[dir] = new node_t(t);
         _size++;
         inserted = true;
@@ -506,16 +509,23 @@ std::pair<typename FineGrainedBST<T>::node_t*, typename FineGrainedBST<T>::Dir> 
     }
     node_t* child = node->children[dir];
     if (child != nullptr && child->val != element) {
+        // Not found, keep traversing
         return find_helper(child, element);
     }
-    node->mtx.lock();
+    // Found or loop terminate
+    node->mtx.lock(); // Lock the parent node
     if (node->color == Color::Blue) {
+        // If node has been marked as erased
         node->mtx.unlock();
+        // Release lock and keep traversing from back node
         return find_helper(node->back, element);
     } else if (node->children[dir] != child) {
+        // The node has been slipped away
         node->mtx.unlock();
+        // Keep traversing down
         return find_helper(node, element);
     }
+    // Node is found, return it
     return std::pair<node_t*, Dir>(node, dir);
 }
 
@@ -548,20 +558,25 @@ template<typename T>
 void FineGrainedBST<T>::deletion_by_rotation(typename FineGrainedBST<T>::node_t* f, Dir dir) {
     node_t* s = f->children[dir];
     if (s->children[Dir::Left] == nullptr) {
+        // Erase condition is met, and target node can be removed by reconnecting edges
         remove(f, dir, Dir::Right);
     } else {
+        // Rotate target node down
         std::vector<node_t*> fgh = rotation(f, dir, Dir::Left);
         f = fgh[0];
-        node_t* g = fgh[1];
-        node_t* h = fgh[2];
+        node_t* g = fgh[1]; // Newly created node
+        node_t* h = fgh[2]; // Newly created node, and this is the node we want to remove, and it has been rotated away from f
         if (h->children[Dir::Left] == nullptr) {
+            // condition is met, start removing
             deletion_by_rotation(g, Dir::Right);
         } else {
             deletion_by_rotation(g, Dir::Right);
             f->mtx.lock();
             if (g != f->children[dir] || f->color == Color::Blue) {
+                // The child has been sliped away or the child has been erased
                 f->mtx.unlock();
             } else {
+                // Erase complete, and rotate nodes back
                 g->mtx.lock();
                 std::vector<node_t*> fgh_new = rotation(f, dir, Dir::Right);
                 f = fgh_new[0];
@@ -687,6 +702,9 @@ class LockFreeBST : public BST<T> {
     std::atomic<int> rw_count;
     std::mutex mtx;
 
+    /**********************************************
+     * Helper functions for tag/flag manipulation
+     **********************************************/
     size_t set_flag(size_t addr);
     size_t set_tag(size_t addr);
     bool is_flagged(size_t addr);
