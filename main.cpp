@@ -8,7 +8,10 @@
 #include <chrono>
 #include <getopt.h>
 #include <numeric>
- 
+
+/********************************
+ * Macros for testing correctness
+ ********************************/
 #define RAND_RANGE 1000
 // #define INPUT_PRINT
 //#define TEST_CORRECTNESS
@@ -44,6 +47,9 @@ void free_bsts() {
     delete bst_ptrs[2];
 }
 
+/**
+ * Test insert, erase, and find on the single thread
+ */
 void test_single_thread(BST<int>& bst) {
     // bst.clear();
     bst.set_N(1);
@@ -80,6 +86,9 @@ void test_single_thread(BST<int>& bst) {
     printf("test correctness passed\n");
 }
 
+/**
+ * Test operations under multi-thread
+ */
 void test_multi_thread(BST<int>& bst) {
     // bst.clear();
     bst.set_N(THREAD_NUM);
@@ -151,6 +160,7 @@ void load_test(BST<int>& bst) {
     std::chrono::high_resolution_clock::time_point start_time;
     switch (pattern) {
         case Pattern::Insert:
+            // Insert only
             start_time = std::chrono::high_resolution_clock::now();
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id] = std::thread([&bst](size_t thread_id) {
@@ -165,6 +175,7 @@ void load_test(BST<int>& bst) {
             }
             break;
         case Pattern::Erase:
+            // Erase only
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id] = std::thread([&bst, &data](size_t thread_id) {
                     bst.register_thread(thread_id);
@@ -193,6 +204,7 @@ void load_test(BST<int>& bst) {
             }
             break;
         case Pattern::Find:
+            // Find only 
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id] = std::thread([&bst, &data](size_t thread_id) {
                     bst.register_thread(thread_id);
@@ -221,6 +233,7 @@ void load_test(BST<int>& bst) {
             }
             break;
         case Pattern::Contention:
+            // Read/Write on same data
             start_time = std::chrono::high_resolution_clock::now();
             for (size_t thread_id = 0; thread_id < THREAD_NUM; thread_id++) {
                 threads[thread_id] = std::thread([&bst, &data](size_t thread_id) {
@@ -346,6 +359,9 @@ void print_test_status() {
     printf("testing with n=%lu d=%lu\n", THREAD_NUM, TEST_SIZE);
 }
 
+/**
+ * Pattern generator
+ */
 int main(int argc, char **argv) {
     srand(time(NULL));
     int opt;
@@ -409,6 +425,7 @@ int main(int argc, char **argv) {
                 TEST_SIZE = stoi(tmp);
                 break;
             default:
+                printf("-a: algorithm, availabe trees: 0=CoarseGrained 1=FineGrained 2=LockFree\n");
                 printf("-t: run correctness tests\n");
                 printf("-p: run pattern generator, available parameters: 0=Insert, 1=Erase, 2=Find, 3=Contention, 4=Write_dominance, 5=Mixed, 6=Read_dominance\n");
                 printf("-n: thread num\n");
