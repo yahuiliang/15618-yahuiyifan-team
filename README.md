@@ -158,7 +158,7 @@ To compare the performance of each BST implementation, we measured the time each
 #### Experiment Results
 We timed each experiment, and plot bar plots of time to compare the performance of each implementation of binary search tree. We selected results of using 1 thread, 64 threads and 256 threads to be presented here. Results using other thread numbers are similar to result of 64 threads and 256 threads.
 
-｜ 1 thread | 64 threads | 256 threads |
+| 1 thread | 64 threads | 256 threads |
 | :-------------------------: | :-------------------------: | :-------------------------: |
 | ![](./result_figs/t_1_p_Insert.png) | ![](./result_figs/t_64_p_Insert.png) | ![](./result_figs/t_256_p_Insert.png) |
 | ![](./result_figs/t_1_p_Erase.png) | ![](./result_figs/t_64_p_Erase.png) | ![](./result_figs/t_256_p_Erase.png) |
