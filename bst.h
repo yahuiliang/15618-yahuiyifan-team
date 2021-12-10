@@ -11,25 +11,40 @@
 #include <condition_variable>
 #include <climits>
 
+/**
+ * The interface for binary search tree definition
+ */
 template<typename T>
 class BST {
 protected:
-    size_t N;
-    static const size_t R;
+    size_t N; // Thread number for using the bst
+    static const size_t R; // Retire list length for each thread
 public:
     virtual ~BST() {}
+    // Insert element
     virtual bool insert(const T& t)=0;
+    // Erase element
     virtual void erase(const T& t)=0;
+    // Check whether element exists in the tree
     virtual bool find(const T& t)=0;
+    // Tree size
     virtual size_t size()=0;
+    // Clear the content of the tree
     virtual void clear()=0;
+    // Set the number of thread using the tree
     virtual void set_N(size_t _N) { N = _N; }
+    // Register the thread id for the current thread
     virtual void register_thread(size_t tid)=0;
 };
 
 template<typename T>
 const size_t BST<T>::R = 100;
 
+/**
+ * Coarse Grained BST uses the single global mutex to synchronize
+ * operations. Concurrent operation is not allowed in this structure.
+ * Only one operation can be performed at a time.
+ */
 template<typename T>
 class CoarseGrainedBST : public BST<T> {
     struct node_t {
@@ -52,6 +67,7 @@ class CoarseGrainedBST : public BST<T> {
 public:
     CoarseGrainedBST();
     virtual ~CoarseGrainedBST();
+    // Delete some default contructors and operators which may affect tree structure
     CoarseGrainedBST(const CoarseGrainedBST& other)=delete;
     CoarseGrainedBST& operator=(const CoarseGrainedBST& other)=delete;
     CoarseGrainedBST(const CoarseGrainedBST&& other)=delete;
@@ -105,6 +121,15 @@ bool CoarseGrainedBST<T>::insert(const T& t) {
     return inserted;
 }
 
+/**
+ * The algorithm uses general binary search logic to traverse until
+ * the left or right child of the current node is null. Then the new data
+ * will be appended as the child of the current node.
+ *
+ * @param node current node on the traverse path
+ * @param element data needs to be inserted
+ * @return true if insertion is successful; false otherwise.
+ */
 template<typename T>
 bool CoarseGrainedBST<T>::insert_helper(node_t* node, const T& element) {
     const T& node_val = node->val;
@@ -140,6 +165,13 @@ void CoarseGrainedBST<T>::erase(const T& t) {
     mtx.unlock();
 }
 
+/**
+ * Erase the node whose key matches with the given key.
+ *
+ * @param parent current node parent
+ * @param node current node
+ * @param element data needs to be inserted
+ */
 template<typename T>
 void CoarseGrainedBST<T>::erase_helper(node_t* parent, node_t* node, const T& element) {
     if (node == nullptr) {
@@ -236,6 +268,10 @@ size_t CoarseGrainedBST<T>::size() {
     return _size;
 }
 
+/**
+ * Fine Grained BST uses node internal lock to sync node
+ * edge modifications
+ */
 template<typename T>
 class FineGrainedBST : public BST<T> {
     enum Dir {
@@ -275,14 +311,65 @@ class FineGrainedBST : public BST<T> {
 
     node_t* root;
     std::atomic<size_t> _size;
+    /**
+     * Traverses the tree until it finds the target node.
+     * Before the function gets returned, the edge between the 
+     * parent and the target will be locked to avoid other threads
+     * modifications. Before two nodes get returned, child's key
+     * value will be checked against its old value to ensure the child
+     * is not slipped away. If the child has been slipped away, the lock
+     * on the parent will be released and the traversal will continue.
+     *
+     * @param node current node
+     * @param element key which needs to be found
+     * @return target node parent and target node
+     */
     std::pair<node_t*, Dir> find_helper(node_t* node, const T& element);
+    
+    /**
+     * Rotate the subtree of node a. Rotation will not reconnect nodes on the
+     * original tree directly. Instead, it creates new nodes and insert new nodes
+     * into the tree to replace the old one.
+     * 
+     * @param a root node of subtree
+     * @param dir1 child which needs to be rotated away from root
+     * @param dir2 child which needs to be rotated toward the root
+     * @return a, a->dir1, a->dir2 after the rotation
+     */
     std::vector<node_t*> rotation(node_t* a, Dir dir1, Dir dir2);
     void clear(node_t* node);
+    
+    /**
+     * Remove a->dir1 from the tree by reconnecting a->dir1 with a->dir1->dir2.
+     * This will isolate old a->dir1.
+     *
+     * @param a parent node
+     * @param dir1 child which needs to be erased
+     * @param dir2 child which replaces a->dir1
+     */
     void remove(typename FineGrainedBST<T>::node_t* a, Dir dir1, Dir dir2);
+    
+    /**
+     * The function keeps rotating the node which needs to be erased until it 
+     * only has one incoming edge and one outgoing edge. By reconnecting the parent
+     * node and the child node of the node which needs to removed, the node will be 
+     * isolated from the tree.
+     *
+     * @param f the parent node
+     * @param dir f->dir is the node which needs to be removed.
+     */
     void deletion_by_rotation(node_t* f, Dir dir);
-    void append_hp(node_t* ptr);
-    void scan();
+    
+    /**
+     * Retires the node. The node will be freed in the future.
+     *
+     * @param ptr the node pointer
+     */
     void retire(node_t* ptr);
+
+    /**
+     * Check the retire list length and free nodes if threshold is reached.
+     */
     void gc();
 public:
     FineGrainedBST();
@@ -291,8 +378,28 @@ public:
     FineGrainedBST(FineGrainedBST&& other)=delete;
     FineGrainedBST& operator=(const FineGrainedBST& other)=delete;
     FineGrainedBST& operator=(const FineGrainedBST&& other)=delete;
+    /**
+     * Find to get the target parent first (find_helper). Then insert the new node to the left or right
+     * of the parent node.
+     *
+     * @param t key which needs to be inserted
+     * @return true if successfully inserted; false otherwise.
+     */
     virtual bool insert(const T& t);
+    
+    /**
+     * Find to get the target parent first (find_helper). Then use deletion_by_rotation to remove the node.
+     *
+     * @param t key which needs to be removed
+     */
     virtual void erase(const T& t);
+
+    /**
+     * Find until the given key is found (find_helper).
+     * 
+     * @param t target key
+     * @return true if found; false otherwise.
+     */
     virtual bool find(const T& t);
     virtual size_t size();
     virtual void clear();
