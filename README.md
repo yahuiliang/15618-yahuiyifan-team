@@ -66,11 +66,11 @@ We are going to use C++ to implement our data structures. Our team members are m
 | Week | Date | Tasks | Done |
 | --- | --- | :-: | :-: |
 | 1 | 11.1 - 11.7 | Proposal <br> Literature review <br> Coarse-grained lock version BST | Yes |
-| 2 | 11.8 - 11.14 | Fine-grained lock version BST <br> Lock-free version BST | Fine-grained version finished (Memory release problem not solved) <br> Lock-free version started |
-| 3 | 11.15 - 11.21 | Lock-free version BST <br> Transactional memory version BST <br> Milestone report | Lock-free version started <br> Transactional memory version not started yet |
-| 4 | 11.22 - 11.28 | Transactional memory version BST <br> Experiment workload generation | No |
-| 5 | 11.29 - 12.5 | Experiments and analysis | No |
-| 6 | 12.6 - 12.10 | Final report <br> Poster | No |
+| 2 | 11.8 - 11.14 | Fine-grained lock version BST <br> Lock-free version BST | Yes |
+| 3 | 11.15 - 11.21 | Lock-free version BST <br> Transactional memory version BST <br> Milestone report | Yes |
+| 4 | 11.22 - 11.28 | Transactional memory version BST <br> Experiment workload generation | Yes |
+| 5 | 11.29 - 12.5 | Experiments and analysis | Yes |
+| 6 | 12.6 - 12.10 | Final report <br> Poster | Yes |
 
 ## Checkpoint
 ### Schedule
@@ -157,6 +157,14 @@ To compare the performance of each BST implementation, we measured the time each
 
 #### Experiment Results
 We timed each experiment, and plot bar plots of time to compare the performance of each implementation of binary search tree. We selected results of using 1 thread, 64 threads and 256 threads to be presented here. Results using other thread numbers are similar to result of 64 threads and 256 threads.
+:-------------------------:|:-------------------------: | :-------------------------:
+![](./result_figs/t_1_p_Insert.png)  |  ![](./result_figs/t_64_p_Insert.png) |  ![](./result_figs/t_256_p_Insert.png) |
+![](./result_figs/t_1_p_Erase.png)  |  ![](./result_figs/t_64_p_Erase.png) |  ![](./result_figs/t_256_p_Erase.png) |
+![](./result_figs/t_1_p_Find.png)  |  ![](./result_figs/t_64_p_Find.png) |  ![](./result_figs/t_256_p_Find.png) |
+![](./result_figs/t_1_p_Write_dominance.png)  |  ![](./result_figs/t_64_p_Write_dominance.png) |  ![](./result_figs/t_256_p_Write_dominance.png) |
+![](./result_figs/t_1_p_Mixed.png)  |  ![](./result_figs/t_64_p_Mixed.png) |  ![](./result_figs/t_256_p_Mixed.png) |
+![](./result_figs/t_1_p_Read_dominance.png)  |  ![](./result_figs/t_64_p_Read_dominance.png) |  ![](./result_figs/t_256_p_Read_dominance.png) |
+
 #### Conclusion and Analysis
 After carrying out the experiments, we draw several conclusions and analyze the reason.
 ##### Single thread performance
