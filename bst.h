@@ -303,9 +303,12 @@ class FineGrainedBST : public BST<T> {
             color = Color::White;
         }
     };
-    static thread_local size_t thread_id;
-    std::vector<std::vector<node_t*>> rlist;
+    static thread_local size_t thread_id; // Local thread id
+    std::vector<std::vector<node_t*>> rlist; // Retire list
     
+    /**
+     * Atomic variables and locks for GC purpose
+     */
     std::atomic<int> rw_count;
     std::mutex mtx;
 
@@ -658,12 +661,24 @@ size_t FineGrainedBST<T>::size() {
     return _size.load();
 }
 
+/************************************
+ * Macros for dummy nodes as the root
+ ************************************/
 #define INFINITY_0 INT_MAX - 2
 #define INFINITY_1 INT_MAX - 1
 #define INFINITY_2 INT_MAX
 
+/**
+ * Flag bit is the last bit in the address
+ */
 static size_t flag_mask = 0x1;
+/**
+ * Tag bit is the last second bit in the address
+ */
 static size_t tag_mask = 0x2;
+/**
+ * Remain bits are addresses
+ */
 static size_t addr_mask = static_cast<size_t>(0b11);
 
 typedef std::atomic<size_t> atomic_size_t;
@@ -687,18 +702,22 @@ class LockFreeBST : public BST<T> {
         }
     };
     struct seekRecord_t {
-        size_t ancestor;
-        size_t successor;
-        size_t parent;
-        size_t leaf;
+        size_t ancestor; // The parent node of the successor node
+        size_t successor; // In most cases, it is same as parent. Otherwise, it is the last node which is not being erased
+        size_t parent; // The parent node of leaf
+        size_t leaf; // The leaf of the tree
     };
-    atomic_size_t R_root;
-    atomic_size_t S_root;
+    atomic_size_t R_root; // Dummy node
+    atomic_size_t S_root; // Dummy node
 
     atomic_size_t _size;
 
-    static thread_local size_t thread_id;
-    std::vector<std::vector<node_t*>> rlist;
+    static thread_local size_t thread_id; // Local thread id
+    std::vector<std::vector<node_t*>> rlist; // Retire list
+    
+    /**
+     * Atomic variables and locks for GC purpose
+     */
     std::atomic<int> rw_count;
     std::mutex mtx;
 
@@ -712,13 +731,70 @@ class LockFreeBST : public BST<T> {
     node_t *get_addr(size_t addr);
 
     void clear(size_t node_addr);
+
+    /**
+     * Very similar to the basic BST traverse logic.
+     * Instead, it returns the result in seekRecord format.
+     *
+     * @param key the key which needs to be searched
+     * @param seekRecord where the result will be stored to
+     */
     void seek(const T& key, struct seekRecord_t *seekRecord);
+    
+    /**
+     * Isolate node by reconnecting ancestor node with the sibling node.
+     *
+     * @param key the key which needs to be cleaned
+     * @param seekRecord nodes which need to be manipulated
+     * @return true if cleanup is successful; false otherwise
+     */
     bool cleanup(const T& key, const seekRecord_t* seekRecord);
+
+    /**
+     * Calling seek to get the leaf location where the new key should be inserted to.
+     * Two new nodes will be created in this step. One node is the internal node, and another
+     * node is the leaf node which holds the actual key. The internal node value will be 
+     * the maximum value between the node at the current leaf location and the given key.
+     * Then the old leaf node and the new leaf node will be inserted to left or right of
+     * the internal node.
+     *
+     * @param key the key which needs to be inserted
+     * @return true if the key is inserted successfully; false otherwise
+     */
     bool insert_helper(const T& key);
+
+    /**
+     * The erase operation removes two nodes for each call. One node is the internal node, 
+     * and another node is the leaf node which stores the key.Erase operation simply 
+     * reconnect the parent of the internal node to the sibling. Therefore, the internal 
+     * node and the leaf is isolated from the tree.
+     *
+     * @param key the key which needs to be erased
+     * @return true if the key is inserted successfully; false otherwise
+     */
     bool erase_helper(const T& key);
+
+    /**
+     * Relies on seek to retrieve record and compare whether the retrieved record
+     * is same as the given one.
+     *
+     * @param key the key which needs to be found
+     * @return true if the key is found successfully; false otherwise
+     */
     bool find_helper(const T& key);
+    
+    /**
+     * Check the retire list and free nodes if necessary.
+     */
     void gc();
+
+    /**
+     * Push the node to the retire list.
+     *
+     * @param ptr the node which needs to be retired
+     */
     void retire(node_t* ptr);
+
     void init();
 public:
     LockFreeBST();
@@ -756,6 +832,7 @@ void LockFreeBST<T>::gc() {
     if (rlist[thread_id].size() > BST<T>::R) {
         mtx.lock();
         while (rw_count > 0);
+        // Iterate the retire list and free nodes
         for (node_t* node : rlist[thread_id]) {
             delete node;
         }
@@ -768,7 +845,10 @@ template<typename T>
 void LockFreeBST<T>::init() {
     rw_count = 0;
     _size = 0;
-
+    
+    /********************
+     * Create dummy nodes
+     ********************/
     node_t *R_root_n = new node_t(INFINITY_2);
     node_t *S_root_n = new node_t(INFINITY_1);
 
@@ -792,6 +872,7 @@ LockFreeBST<T>::LockFreeBST() {
 template<typename T>
 LockFreeBST<T>::~LockFreeBST() {
     clear();
+    // Erase dummy nodes
     node_t* R_root_n = get_addr(R_root);
     node_t* S_root_n = get_addr(R_root_n->left);
     node_t* sentinel_node_0 = get_addr(S_root_n->left);
@@ -885,15 +966,17 @@ bool LockFreeBST<T>::insert(const T& t) {
 
 template<typename T>
 bool LockFreeBST<T>::insert_helper(const T& t) {
+    // While loop is used for traversing the tree
     while (true) {
         struct seekRecord_t seekRecord;
-        seek(t, &seekRecord);
+        seek(t, &seekRecord); // Get the leaf location where the key should be inserted to
         if (get_addr(seekRecord.leaf)->key != t) {
             size_t parent = seekRecord.parent;
             size_t leaf = seekRecord.leaf;
             node_t *parent_n = get_addr(parent);
             node_t *leaf_n = get_addr(leaf);
 
+            // Create internal node and leaf node
             node_t *new_leaf = new node_t(t);
             node_t *newInternal = new node_t();
             if (t < leaf_n->key) {
@@ -910,6 +993,7 @@ bool LockFreeBST<T>::insert_helper(const T& t) {
             
             atomic_size_t* childAddrPtr;
             bool result;
+            // Reconnect internal node, old leaf, and new leaf
             if (t < parent_n->key) {
                 childAddrPtr = &parent_n->left;
                 result = std::atomic_compare_exchange_weak(&(parent_n->left), &old_leaf, internal);
@@ -918,6 +1002,7 @@ bool LockFreeBST<T>::insert_helper(const T& t) {
                 result = std::atomic_compare_exchange_weak(&(parent_n->right), &old_leaf, internal);
             }
             if (result) {
+                // Return if edge modifications are successful
                 return true;
             } else {
                 // help the conflicting delete operation
@@ -962,10 +1047,11 @@ bool LockFreeBST<T>::erase_helper(const T& key) {
     bool done = false;
     while (!done) {
         seekRecord_t seekRecord;
-        seek(key, &seekRecord);
+        seek(key, &seekRecord); // Get the parent and the leaf which needs to be erased
         size_t parent = seekRecord.parent;
         node_t* parent_n = get_addr(parent);
         atomic_size_t* childAddrPtr;
+        // Get the edge between the parent and the leaf which needs to be erased
         if (key < parent_n->key) {
             childAddrPtr = &(parent_n->left);
         } else {
@@ -975,8 +1061,10 @@ bool LockFreeBST<T>::erase_helper(const T& key) {
             leaf = seekRecord.leaf;
             leaf_n = get_addr(leaf);
             if (leaf_n->key != key) {
+                // If key does not exist
                 return false;
             }
+            // Set flag bit
             size_t old_leaf = reinterpret_cast<size_t>(leaf_n);
             bool result = std::atomic_compare_exchange_weak(
                 childAddrPtr, 
@@ -985,17 +1073,21 @@ bool LockFreeBST<T>::erase_helper(const T& key) {
             );
             if (result) {
                 mode = Mode::CLEANUP;
+                // Cleanup the node
                 done = cleanup(key, &seekRecord);
             } else {
                 size_t childAddr = *childAddrPtr;
                 if (get_addr(childAddr) == leaf_n && (is_flagged(childAddr) || is_tagged(childAddr))) {
+                    // If the node has been marked as clean, help to clean the node
                     cleanup(key, &seekRecord);
                 }
             }
         } else {
             if (seekRecord.leaf != leaf) {
+                // Leaf has been erased
                 return false;
             } else {
+                // Help to clean
                 done = cleanup(key, &seekRecord);
             }
         }
@@ -1030,6 +1122,7 @@ bool LockFreeBST<T>::cleanup(const T& key, const seekRecord_t* seekRecord) {
     }
     bool flagged = is_flagged(*childAddrPtr);
     if (!flagged) {
+        // If the leaf is not marked as clean, then we should not clean this node
         siblingAddrPtr = childAddrPtr;
     }
     
@@ -1041,12 +1134,14 @@ bool LockFreeBST<T>::cleanup(const T& key, const seekRecord_t* seekRecord) {
     size_t successorExpect = reinterpret_cast<size_t>(successor_n);
     size_t successorNew = siblingAddr;
     if (flagged) {
+        // Copy flag bit
         successorNew = set_flag(successorNew);
     }
+    // Reconnect the ancester node with the sibling to isolate parent and internal node
     bool result = std::atomic_compare_exchange_weak(
         successorAddrPtr, 
         &successorExpect,
-        successorNew & ~tag_mask
+        successorNew & ~tag_mask // Clear the tag bit
     );
     
     if (result) {
